@@ -48,17 +48,19 @@ struct SettingsView: View {
                     if mode != initialMode || pingChanged { startSyncAndClose() }
                     else { window?.performClose(nil) }
                 } label: {
-                    if syncing {
-                        // 적용 버튼 안에 카운트다운 (10→1), 그 뒤엔 스피너
-                        if syncCountdown > 0 { Text("\(syncCountdown)").monospacedDigit() }
-                        else { ProgressView().controlSize(.small) }
-                    } else {
-                        Text(tr(lang, "Apply", "적용"))
+                    Group {
+                        if syncing {
+                            // 적용 버튼 안에 카운트다운 (10→1), 그 뒤엔 스피너
+                            if syncCountdown > 0 { Text("\(syncCountdown)").monospacedDigit() }
+                            else { ProgressView().controlSize(.small) }
+                        } else {
+                            Text(tr(lang, "Apply", "적용"))
+                        }
                     }
+                    .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                .frame(maxWidth: .infinity)
                 .disabled(syncing)
             } header: {
                 Text(tr(lang, "Ping method", "핑 방식"))

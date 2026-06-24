@@ -30,9 +30,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
-        // pace-schedule 스킬을 ~/.claude/skills 에 설치 (Cloud routine 관리에 필요)
-        SkillInstaller.installIfNeeded()
-
         // config 정규화 + 핑 스케줄 최신화
         let cfg = Config.load()
         cfg.save()

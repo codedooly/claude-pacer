@@ -12,24 +12,38 @@ struct PaceResult {
 }
 
 /// 클라우드 routine 관리 — Pacer 는 triggers API 를 직접 못 쓰므로(Cloudflare),
-/// `claude -p "/pace-schedule <action> [times]"` 로 CLI 를 다리 삼아 호출하고 PACE_RESULT 를 파싱한다.
+/// 번들 내장 지침(PaceScheduleSkill.md)을 명령형으로 감싸 `claude -p` 로 실행하고 PACE_RESULT 를 파싱한다.
+/// (글로벌 ~/.claude/skills 설치 없이 자체 완결 — 슬래시커맨드 해석에 의존하던 비결정성 제거)
 enum RoutineService {
     /// @param action register | disable | enable | status
     /// @param times  register 시 핑 시각 ["08:00", ...] (그 외 무시)
     /// @param env    (선택) 사용자가 `/schedule` 에서 복사한 env_id — 환경 자동탐지 실패(no_env) 대비
     /// @returns 파싱된 PaceResult (실패 시 nil)
     static func run(_ action: String, times: [String] = [], env: String = "") async -> PaceResult? {
-        // /pace-schedule <action> <times> <env> — env 는 3번째 토큰(선택)
+        // 번들 스킬 지침을 명령형으로 감싸 직접 실행 (글로벌 설치·슬래시커맨드 의존 제거 — 결정적 동작)
+        guard let skillURL = Bundle.main.url(forResource: "PaceScheduleSkill", withExtension: "md"),
+              let raw = try? String(contentsOf: skillURL, encoding: .utf8) else { return nil }
+        // YAML 프론트매터(--- ... ---) 제거
+        var body = raw
+        if body.hasPrefix("---"), let end = body.range(of: "\n---", range: body.index(body.startIndex, offsetBy: 3)..<body.endIndex) {
+            body = String(body[end.upperBound...])
+        }
         let timesArg = times.isEmpty ? "" : times.sorted().joined(separator: ",")
-        let arg = ["/pace-schedule", action, timesArg, env]
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
+        let argLine = (["ARGUMENTS:", action, timesArg, env].filter { !$0.isEmpty }).joined(separator: " ")
+        let prompt = """
+        아래 [지침]을 지금 실제로 실행하라. 지침을 요약·복창하지 말 것. 명시된 도구(RemoteTrigger)를 실제 호출해 작업을 수행하고, 반드시 마지막 줄에 PACE_RESULT 한 줄을 출력하라.
+
+        \(argLine)
+
+        [지침]
+        \(body)
+        """
 
         let p = Process()
         p.executableURL = URL(fileURLWithPath: PingRunner.claudePath())
         // 현재 모델 ID 직접 지정 — CLI 의 sonnet/haiku 단축 alias 는 구버전이면 은퇴 스냅샷으로 풀려 404.
         // 전체 ID 를 주면 CLI 가 그대로 API 로 넘겨 서버가 해석한다.
-        p.arguments = ["--model", "claude-sonnet-4-6", "-p", arg]
+        p.arguments = ["--model", "claude-sonnet-4-6", "-p", prompt]
         // 빈 전용 cwd — config.json 등 로컬 파일을 모델이 읽고 '이미 설정됨'으로 오판하는 것 방지 (+ TCC 팝업 방지)
         let workDir = NSHomeDirectory() + "/.config/claude-pacer/.skillrun"
         try? FileManager.default.removeItem(atPath: workDir)
