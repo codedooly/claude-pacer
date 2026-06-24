@@ -5,6 +5,11 @@ enum PingScheduler {
     static let label = "com.dooly.pacer.ping"
     static var plistPath: String { NSHomeDirectory() + "/Library/LaunchAgents/\(label).plist" }
 
+    /// 핑 plist 가 설치돼 있는지 (launchd 등록 여부 근사).
+    static func isInstalled() -> Bool {
+        FileManager.default.fileExists(atPath: plistPath)
+    }
+
     /// config 의 핑 시각으로 plist 를 다시 쓰고 launchd 에 리로드.
     static func reinstall(_ cfg: Config) {
         guard let exe = Bundle.main.executablePath else { return }

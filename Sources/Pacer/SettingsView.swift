@@ -13,6 +13,7 @@ struct SettingsView: View {
     @State private var syncing = false        // Done 시 routine 동기화 카운트다운
     @State private var syncCountdown = 15
     @State private var syncError: String?     // Cloud 등록 실패 안내 (예: no_env). 성공 시 nil 로 클리어
+    @State private var lastNextRunAt: Date?   // 마지막 register 성공 결과의 next_run_at (성공 팝업 안내용)
     @AppStorage("pacerLang") private var lang = "en"
     @AppStorage("routineTimes") private var routineTimes = ""   // 등록된 routine 핑 시각 CSV. 빈 = 미등록
     @AppStorage("routineHealthy") private var routineHealthy = true   // 마지막 status 결과: 클라우드에 routine 존재+enabled
@@ -30,6 +31,18 @@ struct SettingsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+        // 상단 우측 소형 언어 토글 (즉시 전 화면 반영)
+        HStack {
+            Spacer()
+            Picker("Language", selection: $lang) {
+                Text("EN").tag("en")
+                Text("한국어").tag("ko")
+            }
+            .pickerStyle(.segmented).labelsHidden()
+            .frame(width: 130)
+        }
+        .padding(.horizontal)
+        .padding(.top, 8)
         Form {
             // 핑 방식 — 하나만 활성해 Routine/launchd 중복 발사를 막는다
             Section {
@@ -50,9 +63,15 @@ struct SettingsView: View {
                 } label: {
                     Group {
                         if syncing {
-                            // 적용 버튼 안에 카운트다운 (10→1), 그 뒤엔 스피너
-                            if syncCountdown > 0 { Text("\(syncCountdown)").monospacedDigit() }
-                            else { ProgressView().controlSize(.small) }
+                            // 적용 중 — 스피너 + 라벨(+카운트다운) 항상 함께
+                            HStack(spacing: 8) {
+                                ProgressView().controlSize(.small).tint(.white)
+                                if syncCountdown > 0 {
+                                    Text(tr(lang, "Applying… \(syncCountdown)", "적용 중… \(syncCountdown)")).monospacedDigit()
+                                } else {
+                                    Text(tr(lang, "Applying…", "적용 중…"))
+                                }
+                            }
                         } else {
                             Text(tr(lang, "Apply", "적용"))
                         }
@@ -190,6 +209,22 @@ struct SettingsView: View {
                             "Pings won't fire while your Mac sleeps. Run this in Terminal to stay awake even with the lid closed (on power). Needs your password.",
                             "맥북이 잠들면 핑이 나가지 않아요. 터미널에서 실행하면 덮개를 닫아도 (전원 연결 시) 깨어 있습니다. 비밀번호가 필요해요."))
                 }
+
+                // Local — 핑 스케줄러(launchd) 등록 상태 + 미등록 시 재등록
+                Section {
+                    if PingScheduler.isInstalled() {
+                        Label(tr(lang, "Ping scheduler: registered", "핑 스케줄러: 등록됨"), systemImage: "checkmark.seal.fill")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.green)
+                    } else {
+                        Label(tr(lang, "Ping scheduler not registered — pings may not fire", "핑 스케줄러 미등록 — 핑이 안 나갈 수 있어요"), systemImage: "exclamationmark.triangle.fill")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.orange)
+                        Button(tr(lang, "Re-register", "재등록")) { PingScheduler.reinstall(Config.load()) }
+                            .buttonStyle(.borderedProminent)
+                            .frame(maxWidth: .infinity)
+                    }
+                }
             } else {
                 Section {
                     Label(tr(lang,
@@ -203,7 +238,7 @@ struct SettingsView: View {
             Section {
                 Toggle(tr(lang, "Launch at login", "로그인 시 자동 실행"), isOn: $launchAtLogin).tint(.pacerPurple)
             } footer: {
-                Text(tr(lang, "Start Pacer automatically when you log in.", "로그인하면 Pacer 를 자동으로 시작합니다."))
+                Text(tr(lang, "Starts Pacer (menu bar) at login. Independent of ping firing.", "로그인 시 Pacer(메뉴바)를 자동 시작합니다. 핑 발사와는 무관합니다."))
             }
 
             Section {
@@ -216,20 +251,9 @@ struct SettingsView: View {
                         "하루 최대 5개 — 24시간 ÷ 5시간 ≈ 4.8개 창."))
             }
 
-            // 언어 토글 — 맨 아래 (즉시 전 화면 반영)
-            Section {
-                Picker("Language", selection: $lang) {
-                    Text("English").tag("en")
-                    Text("한국어").tag("ko")
-                }
-                .pickerStyle(.segmented).labelsHidden()
-                .frame(maxWidth: .infinity)
-            } header: {
-                Text(tr(lang, "Language", "언어"))
-            }
         }
         .formStyle(.grouped)
-        .scrollIndicators(.hidden)   // 회색 스크롤바 숨김 (스크롤은 그대로 동작)
+        .scrollIndicators(.visible)   // 스크롤바 항상 표시 (하단 내용까지 보이게)
         .disabled(routineLoading)   // routine 동기화 중엔 전체 잠금
         }
         .tint(.pacerPurple)
@@ -291,12 +315,45 @@ struct SettingsView: View {
                 syncCountdown = 0
             }
             // config 저장은 sync 성공 시에만 (registerRoutine/disable 내부) — 타임아웃·실패 시 기존 모드 유지
-            _ = await syncRoutineForMode()
+            let ok = await syncRoutineForMode()
             counter.cancel()
             syncing = false
             window?.standardWindowButton(.closeButton)?.isEnabled = true
-            window?.performClose(nil)
+            // 성공 → 안내 팝업 후 닫기. 실패 → 창 유지 (registerRoutine 내부에서 에러 처리됨)
+            if ok { showAppliedAlert() }
         }
+    }
+
+    /// 적용 성공 팝업 — 모드별 발화 안내. [확인] 시 창 닫기.
+    private func showAppliedAlert() {
+        let times = currentCSV.replacingOccurrences(of: ",", with: " · ")
+        let alert = NSAlert()
+        alert.messageText = tr(lang, "Applied", "적용 완료")
+        if mode == "cloud" {
+            // next_run_at 있으면 KST 로 안내에 포함
+            var info: String
+            if let next = lastNextRunAt {
+                let df = DateFormatter()
+                df.dateFormat = "yyyy-MM-dd HH:mm"
+                df.timeZone = TimeZone(identifier: "Asia/Seoul")
+                let nextStr = df.string(from: next)
+                info = tr(lang,
+                          "Cloud routine registered — pings fire daily at \(times). Next: \(nextStr) KST.",
+                          "Cloud routine 등록 완료 — 매일 \(times) 발화. 다음: \(nextStr) KST.")
+            } else {
+                info = tr(lang,
+                          "Cloud routine registered — pings fire daily at \(times).",
+                          "Cloud routine 등록 완료 — 매일 \(times) 발화.")
+            }
+            alert.informativeText = info
+        } else {
+            alert.informativeText = tr(lang,
+                "Local pings registered — fire daily at \(times) (your Mac must be on).",
+                "Local 핑 등록 완료 — 매일 \(times) 발화 (맥이 켜져 있어야 함).")
+        }
+        alert.addButton(withTitle: tr(lang, "OK", "확인"))
+        alert.runModal()
+        window?.performClose(nil)
     }
 
     /// 모드 전환 시 routine 동기화 — Cloud 면 등록/활성, Local 이면 비활성화. 성공해야 config 확정.
@@ -352,6 +409,7 @@ struct SettingsView: View {
             syncError = nil
             routineTimes = currentCSV
             routineHealthy = true
+            lastNextRunAt = r?.nextRunAt   // 성공 팝업 안내용
             save(mode: mode)        // 성공 시에만 config 확정 (실패·타임아웃 시 불일치 방지)
             initialMode = mode
         } else if r?.reason == "no_env" {
