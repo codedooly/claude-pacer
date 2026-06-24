@@ -39,6 +39,33 @@ enum RoutineService {
         \(body)
         """
 
+        // claude -p 실행 → stdout+stderr 합친 출력 획득 (run()/fetchEnvId() 공유 보일러플레이트)
+        let combined = await runClaude(prompt: prompt)
+        // 합친 출력의 마지막 ~600자 (PACE_RESULT 미발견·reason 없는 실패 시 errorDetail 로 전달)
+        let rawTail = String(combined.suffix(600)).trimmingCharacters(in: .whitespacesAndNewlines)
+        return parse(combined, rawTail: rawTail)
+    }
+
+    /// 클라우드 환경 자동취득 — 신규 계정(trigger 0개)은 register 가 no_env 를 낸다.
+    /// `/schedule` 로 "Available environments" 만 조회해 env_id 를 추출(생성·변경·실행 금지).
+    /// @returns 첫 env_id (없으면 nil)
+    static func fetchEnvId() async -> String? {
+        let prompt = "/schedule 로 Available environments 만 조회. routine 생성·변경·실행 금지. 마지막 줄에 정확히 ENV_ID=<env_xxx 또는 NONE> 만 출력."
+
+        // run() 과 동일 방식으로 실행 (같은 셋업·timeout·가드 재사용)
+        let combined = await runClaude(prompt: prompt)
+
+        // ENV_ID=NONE 명시면 환경 없음
+        if combined.contains("ENV_ID=NONE") { return nil }
+        // 출력에서 첫 env_id 추출
+        guard let range = combined.range(of: "env_[A-Za-z0-9]+", options: .regularExpression) else { return nil }
+        return String(combined[range])
+    }
+
+    /// claude -p 실행 공통 보일러플레이트 — 모델·cwd·PATH·60초 timeout·더블 resume 가드.
+    /// @param prompt 전달할 프롬프트
+    /// @returns stdout + stderr 합친 출력
+    private static func runClaude(prompt: String) async -> String {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: PingRunner.claudePath())
         // 현재 모델 ID 직접 지정 — CLI 의 sonnet/haiku 단축 alias 는 구버전이면 은퇴 스냅샷으로 풀려 404.
@@ -88,11 +115,8 @@ enum RoutineService {
         // stdout + stderr 합쳐 읽기 — 실패 시 실제 에러(404 등)를 사용자에게 노출하기 위함
         let outData = out.fileHandleForReading.readDataToEndOfFile()
         let errData = err.fileHandleForReading.readDataToEndOfFile()
-        let combined = (String(data: outData, encoding: .utf8) ?? "")
+        return (String(data: outData, encoding: .utf8) ?? "")
             + (String(data: errData, encoding: .utf8) ?? "")
-        // 합친 출력의 마지막 ~600자 (PACE_RESULT 미발견·reason 없는 실패 시 errorDetail 로 전달)
-        let rawTail = String(combined.suffix(600)).trimmingCharacters(in: .whitespacesAndNewlines)
-        return parse(combined, rawTail: rawTail)
     }
 
     /// 출력에서 PACE_RESULT 줄을 찾아 JSON 파싱. 못 찾거나 ok=false·reason 없으면 errorDetail 채움.

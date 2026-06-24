@@ -61,6 +61,7 @@ struct SettingsView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
+                .buttonBorderShape(.roundedRectangle)
                 .disabled(syncing)
             } header: {
                 Text(tr(lang, "Ping method", "핑 방식"))
@@ -141,6 +142,12 @@ struct SettingsView: View {
                                 .font(.system(size: 10.5))
                                 .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
+                            // 환경이 아예 없을 때 웹에서 생성용
+                            Button(tr(lang, "Open claude.ai/code", "claude.ai/code 열기")) {
+                                NSWorkspace.shared.open(URL(string: "https://claude.ai/code")!)
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
                         }
                     }
                 } header: {
@@ -331,7 +338,15 @@ struct SettingsView: View {
         routineLoading = true
         let times = hours.sorted().map { String(format: "%02d:00", $0) }
         // cloudEnvId 비어있으면 빈 문자열 → 스킬이 환경 자동탐지. 있으면 그 env 로 최우선 등록.
-        let r = await RoutineService.run("register", times: times, env: cloudEnvId.trimmingCharacters(in: .whitespaces))
+        let envTrimmed = cloudEnvId.trimmingCharacters(in: .whitespaces)
+        var r = await RoutineService.run("register", times: times, env: envTrimmed)
+        // 신규 계정(trigger 0개) no_env + env 미입력 → /schedule 로 env_id 자동취득 후 재등록 (~20초 추가)
+        if r?.reason == "no_env", envTrimmed.isEmpty {
+            if let env = await RoutineService.fetchEnvId() {
+                cloudEnvId = env                                  // 저장 → 다음부턴 바로 사용
+                r = await RoutineService.run("register", times: times, env: env)
+            }
+        }
         let ok = r?.ok ?? false
         if ok {
             syncError = nil
@@ -340,10 +355,10 @@ struct SettingsView: View {
             save(mode: mode)        // 성공 시에만 config 확정 (실패·타임아웃 시 불일치 방지)
             initialMode = mode
         } else if r?.reason == "no_env" {
-            // 클라우드 환경(trigger) 0개 — 신규 사용자. 일반 실패와 구분되는 명확한 안내
+            // 자동취득도 실패 = 환경 자체가 없음. 웹 생성 안내 + env 직접 붙여넣기 폴백
             syncError = tr(lang,
-                "No cloud environment found — run `claude`, open `/schedule` once to create one, then retry.",
-                "클라우드 환경이 없습니다 — 터미널에서 `claude` 실행 후 `/schedule` 을 한 번 띄워 환경을 만든 뒤 다시 시도하세요.")
+                "No cloud environment found. Create one at claude.ai/code, then retry — or paste your env_… below.",
+                "클라우드 환경이 없습니다. claude.ai/code 에서 환경을 만든 뒤 다시 시도하거나, /schedule 의 env_… 를 아래에 붙여넣으세요.")
         } else {
             // 그 외 실패 → 실제 에러(404 등)를 NSAlert 로 노출해 사용자가 접수 가능하게
             let alert = NSAlert()
