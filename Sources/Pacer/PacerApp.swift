@@ -91,6 +91,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         refresh.isEnabled = model.authed
         settings.isEnabled = model.authed
         menu.addItem(.separator())
+        // Update·Help 는 로그인 여부와 무관하게 항상 활성
+        menu.addItem(withTitle: tr(lang, "Update…", "업데이트…"), action: #selector(menuUpdate), keyEquivalent: "")
+        menu.addItem(withTitle: tr(lang, "Help", "도움말"), action: #selector(menuHelp), keyEquivalent: "")
+        menu.addItem(.separator())
         menu.addItem(withTitle: tr(lang, "Quit Pacer", "Pacer 종료"), action: #selector(menuQuit), keyEquivalent: "")
         for item in menu.items { item.target = self }
         if let btn = statusItem.button {
@@ -100,6 +104,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func menuRefresh() { Task { await model.refresh(force: true) } }
     @objc private func menuSettings() { openSettings() }
+    @objc private func menuUpdate() { Updater.runUpdate() }
+    @objc private func menuHelp() { NSWorkspace.shared.open(URL(string: "https://github.com/codedooly/claude-pacer")!) }
     @objc private func menuQuit() { NSApp.terminate(nil) }
 
     /// 설정 창 — NSWindow 직접 관리 (메뉴 카드 버튼·우클릭 메뉴 공용).
