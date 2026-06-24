@@ -7,6 +7,7 @@ struct PaceResult {
     let enabled: Bool
     let nextRunAt: Date?
     let cron: String
+    let reason: String?   // 실패 사유 (예: "no_env" — 클라우드 환경 없음). 없으면 nil
 }
 
 /// 클라우드 routine 관리 — Pacer 는 triggers API 를 직접 못 쓰므로(Cloudflare),
@@ -82,7 +83,8 @@ enum RoutineService {
                 id: obj["id"] as? String ?? "",
                 enabled: obj["enabled"] as? Bool ?? false,
                 nextRunAt: (obj["next_run_at"] as? String).flatMap { UsageService.parseReset($0) },
-                cron: obj["cron"] as? String ?? ""
+                cron: obj["cron"] as? String ?? "",
+                reason: obj["reason"] as? String
             )
         }
         return nil

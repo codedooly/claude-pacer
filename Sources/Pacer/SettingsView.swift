@@ -12,6 +12,7 @@ struct SettingsView: View {
     @State private var routineLoading = false
     @State private var syncing = false        // Done 시 routine 동기화 카운트다운
     @State private var syncCountdown = 15
+    @State private var syncError: String?     // Cloud 등록 실패 안내 (예: no_env). 성공 시 nil 로 클리어
     @AppStorage("pacerLang") private var lang = "en"
     @AppStorage("routineTimes") private var routineTimes = ""   // 등록된 routine 핑 시각 CSV. 빈 = 미등록
     @AppStorage("routineHealthy") private var routineHealthy = true   // 마지막 status 결과: 클라우드에 routine 존재+enabled
@@ -118,6 +119,13 @@ struct SettingsView: View {
                             Button(tr(lang, "Open web", "웹 열기")) { openRoutinesWeb() }
                                 .buttonStyle(.bordered)
                                 .frame(maxWidth: .infinity)
+                        }
+                        // 클라우드 환경 없음(no_env) 등록 실패 안내 — 일반 실패와 구분
+                        if let syncError {
+                            Text(syncError)
+                                .font(.system(size: 11))
+                                .foregroundStyle(.red)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 } header: {
@@ -310,10 +318,16 @@ struct SettingsView: View {
         let r = await RoutineService.run("register", times: times)
         let ok = r?.ok ?? false
         if ok {
+            syncError = nil
             routineTimes = currentCSV
             routineHealthy = true
             save(mode: mode)        // 성공 시에만 config 확정 (실패·타임아웃 시 불일치 방지)
             initialMode = mode
+        } else if r?.reason == "no_env" {
+            // 클라우드 환경(trigger) 0개 — 신규 사용자. 일반 실패와 구분되는 명확한 안내
+            syncError = tr(lang,
+                "No cloud environment found — run `claude`, open `/schedule` once to create one, then retry.",
+                "클라우드 환경이 없습니다 — 터미널에서 `claude` 실행 후 `/schedule` 을 한 번 띄워 환경을 만든 뒤 다시 시도하세요.")
         }
         routineLoading = false
         return ok
