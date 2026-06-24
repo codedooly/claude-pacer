@@ -105,8 +105,94 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func menuRefresh() { Task { await model.refresh(force: true) } }
     @objc private func menuSettings() { openSettings() }
     @objc private func menuUpdate() { Updater.runUpdate() }
-    @objc private func menuHelp() { NSWorkspace.shared.open(URL(string: "https://github.com/codedooly/claude-pacer")!) }
     @objc private func menuQuit() { NSApp.terminate(nil) }
+
+    /// 현재 앱 버전 (CFBundleShortVersionString).
+    private func appVersion() -> String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+    }
+
+    /// Help → About 팝업 (버전·라이선스 + 업데이트 확인 / GitHub / 닫기).
+    @objc private func menuHelp() {
+        let lang = UserDefaults.standard.string(forKey: "pacerLang") ?? "en"
+        let version = appVersion()
+        let alert = NSAlert()
+        alert.icon = NSApp.applicationIconImage
+        alert.messageText = "Pacer \(version)"
+        alert.informativeText = tr(lang,
+            "Paces your Claude usage from the menu bar.\n\n© 2026 codedooly · MIT License · made by codedooly",
+            "메뉴바에서 Claude 사용량 페이스를 잡아줍니다.\n\n© 2026 codedooly · MIT 라이선스 · made by codedooly")
+        alert.addButton(withTitle: tr(lang, "Check for updates", "업데이트 확인"))
+        alert.addButton(withTitle: "GitHub")
+        alert.addButton(withTitle: tr(lang, "Close", "닫기"))
+        switch alert.runModal() {
+        case .alertFirstButtonReturn: checkForUpdates()
+        case .alertSecondButtonReturn: NSWorkspace.shared.open(URL(string: "https://github.com/codedooly/claude-pacer")!)
+        default: break
+        }
+    }
+
+    /// GitHub 최신 릴리즈 태그를 받아 현재 버전과 semver 비교 → 업데이트 안내.
+    private func checkForUpdates() {
+        let lang = UserDefaults.standard.string(forKey: "pacerLang") ?? "en"
+        let current = appVersion()
+        let url = URL(string: "https://api.github.com/repos/codedooly/claude-pacer/releases/latest")!
+        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+            // tag_name(예 "v1.1.0") 파싱 → 앞의 v 제거
+            let latest: String? = data
+                .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+                .flatMap { $0["tag_name"] as? String }
+                .map { $0.hasPrefix("v") ? String($0.dropFirst()) : $0 }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.presentUpdateResult(latest: latest, current: current, lang: lang)
+            }
+        }.resume()
+    }
+
+    /// checkForUpdates 결과를 NSAlert 로 표시 (메인스레드).
+    @MainActor private func presentUpdateResult(latest: String?, current: String, lang: String) {
+        // 네트워크/파싱 실패
+        guard let latest, !latest.isEmpty else {
+            let a = NSAlert()
+            a.messageText = "Pacer"
+            a.informativeText = tr(lang,
+                "Couldn't check for updates — check your connection.",
+                "업데이트 확인 실패 — 인터넷 연결을 확인하세요.")
+            a.runModal()
+            return
+        }
+        // semver 비교 (major.minor.patch 숫자)
+        if Self.isNewer(latest, than: current) {
+            let a = NSAlert()
+            a.messageText = "Pacer"
+            a.informativeText = tr(lang,
+                "Version \(latest) is available. Update now?",
+                "새 버전 \(latest) 이 있습니다. 지금 업데이트할까요?")
+            a.addButton(withTitle: tr(lang, "Update", "업데이트"))
+            a.addButton(withTitle: tr(lang, "Cancel", "취소"))
+            if a.runModal() == .alertFirstButtonReturn { Updater.runUpdate() }
+        } else {
+            let a = NSAlert()
+            a.messageText = "Pacer"
+            a.informativeText = tr(lang,
+                "You're on the latest version (\(current)).",
+                "최신 버전입니다 (\(current)).")
+            a.runModal()
+        }
+    }
+
+    /// semver 숫자 비교 — a 가 b 보다 높으면 true.
+    private static func isNewer(_ a: String, than b: String) -> Bool {
+        let pa = a.split(separator: ".").map { Int($0) ?? 0 }
+        let pb = b.split(separator: ".").map { Int($0) ?? 0 }
+        for i in 0..<max(pa.count, pb.count) {
+            let x = i < pa.count ? pa[i] : 0
+            let y = i < pb.count ? pb[i] : 0
+            if x != y { return x > y }
+        }
+        return false
+    }
 
     /// 설정 창 — NSWindow 직접 관리 (메뉴 카드 버튼·우클릭 메뉴 공용).
     func openSettings() {
