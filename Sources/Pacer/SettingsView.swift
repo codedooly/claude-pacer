@@ -44,10 +44,6 @@ struct SettingsView: View {
                 HStack {
                     Text(tr(lang, "Ping method", "핑 방식"))
                     Spacer()
-                    // 최신 버전으로 교체·재시작 (Done 로직과 무관한 순수 추가)
-                    Button(tr(lang, "Update", "업데이트")) { Updater.runUpdate() }
-                        .buttonStyle(.bordered)
-                        .controlSize(.regular)
                     Button {
                         // 모드 변경 OR (Cloud에서) 핑 변경 → 동기화 후 닫기, 아니면 바로 닫기
                         let pingChanged = mode == "cloud" && !routineTimes.isEmpty && routineTimes != currentCSV
@@ -346,6 +342,12 @@ struct SettingsView: View {
             syncError = tr(lang,
                 "No cloud environment found — run `claude`, open `/schedule` once to create one, then retry.",
                 "클라우드 환경이 없습니다 — 터미널에서 `claude` 실행 후 `/schedule` 을 한 번 띄워 환경을 만든 뒤 다시 시도하세요.")
+        } else {
+            // 그 외 실패 → 실제 에러(404 등)를 NSAlert 로 노출해 사용자가 접수 가능하게
+            let alert = NSAlert()
+            alert.messageText = tr(lang, "Cloud registration failed", "Cloud 등록 실패")
+            alert.informativeText = r?.errorDetail ?? syncError ?? "unknown"
+            alert.runModal()
         }
         routineLoading = false
         return ok

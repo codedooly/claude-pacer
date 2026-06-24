@@ -8,6 +8,7 @@ struct PaceResult {
     let nextRunAt: Date?
     let cron: String
     let reason: String?   // 실패 사유 (예: "no_env" — 클라우드 환경 없음). 없으면 nil
+    var errorDetail: String?   // PACE_RESULT 없거나 reason 없는 실패 시: 합친 출력 마지막 ~600자
 }
 
 /// 클라우드 routine 관리 — Pacer 는 triggers API 를 직접 못 쓰므로(Cloudflare),
@@ -33,8 +34,9 @@ enum RoutineService {
         try? FileManager.default.createDirectory(atPath: workDir, withIntermediateDirectories: true)
         p.currentDirectoryURL = URL(fileURLWithPath: workDir)
         let out = Pipe()
+        let err = Pipe()
         p.standardOutput = out
-        p.standardError = Pipe()
+        p.standardError = err
         // claude 가 하위 도구를 찾도록 PATH 보강
         var env = ProcessInfo.processInfo.environment
         let claudeDir = (PingRunner.claudePath() as NSString).deletingLastPathComponent
@@ -67,13 +69,18 @@ enum RoutineService {
             }
         }
 
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        guard let s = String(data: data, encoding: .utf8) else { return nil }
-        return parse(s)
+        // stdout + stderr 합쳐 읽기 — 실패 시 실제 에러(404 등)를 사용자에게 노출하기 위함
+        let outData = out.fileHandleForReading.readDataToEndOfFile()
+        let errData = err.fileHandleForReading.readDataToEndOfFile()
+        let combined = (String(data: outData, encoding: .utf8) ?? "")
+            + (String(data: errData, encoding: .utf8) ?? "")
+        // 합친 출력의 마지막 ~600자 (PACE_RESULT 미발견·reason 없는 실패 시 errorDetail 로 전달)
+        let rawTail = String(combined.suffix(600)).trimmingCharacters(in: .whitespacesAndNewlines)
+        return parse(combined, rawTail: rawTail)
     }
 
-    /// 출력에서 PACE_RESULT 줄을 찾아 JSON 파싱.
-    private static func parse(_ output: String) -> PaceResult? {
+    /// 출력에서 PACE_RESULT 줄을 찾아 JSON 파싱. 못 찾거나 ok=false·reason 없으면 errorDetail 채움.
+    private static func parse(_ output: String, rawTail: String) -> PaceResult? {
         for line in output.split(separator: "\n") where line.contains("PACE_RESULT") {
             let json = line
                 .replacingOccurrences(of: "PACE_RESULT", with: "")
@@ -82,15 +89,20 @@ enum RoutineService {
                 let d = json.data(using: .utf8),
                 let obj = try? JSONSerialization.jsonObject(with: d) as? [String: Any]
             else { continue }
+            let ok = obj["ok"] as? Bool ?? false
+            let reason = obj["reason"] as? String
             return PaceResult(
-                ok: obj["ok"] as? Bool ?? false,
+                ok: ok,
                 id: obj["id"] as? String ?? "",
                 enabled: obj["enabled"] as? Bool ?? false,
                 nextRunAt: (obj["next_run_at"] as? String).flatMap { UsageService.parseReset($0) },
                 cron: obj["cron"] as? String ?? "",
-                reason: obj["reason"] as? String
+                reason: reason,
+                // ok=false 인데 reason 도 없으면 원인 추적용 원문 꼬리 전달
+                errorDetail: (!ok && reason == nil) ? rawTail : nil
             )
         }
-        return nil
+        // PACE_RESULT 자체를 못 찾음 → 실패. 원문 꼬리를 errorDetail 로 반환해 호출자가 메시지를 받게
+        return PaceResult(ok: false, id: "", enabled: false, nextRunAt: nil, cron: "", reason: nil, errorDetail: rawTail)
     }
 }
