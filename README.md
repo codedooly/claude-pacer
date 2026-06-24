@@ -130,6 +130,18 @@ Cloud Routine 의 상태(등록됨 / 끊김 / 갱신 필요)는 앱 시작 시·
 
 routine 을 등록·갱신하는 지침이 앱 번들에 내장되어 있고, Cloud 등록 시 `claude -p` 로 **직접 실행**됩니다 — 사용자 `~/.claude/skills` 에 아무것도 설치하지 않는 **자체 완결** 방식입니다.
 
+### Cloud 첫 설정·문제해결
+
+대부분 **Cloud → 적용**만 누르면 Pacer 가 환경ID 를 자동 조회해 등록합니다. 막히면:
+
+| 증상 | 해결 |
+|------|------|
+| "클라우드 환경 없음" 반복 | **claude.ai/code 열기** → 로그인·환경 생성(웹 1회) → 다시 적용 |
+| `404 not_found · model` | Claude Code(`claude`) 업데이트 |
+| 사용량 0 / "갱신 실패" | 터미널에서 `claude` 한 번 실행 → 새로고침 |
+
+자세한 셋업·문제해결 → **[docs/cloud-setup.md](docs/cloud-setup.md)**
+
 ---
 
 ## 메뉴 카드 구성

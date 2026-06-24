@@ -130,6 +130,18 @@ Routine status (registered / disconnected / needs renewal) is detected automatic
 
 The instructions that register/update the routine are bundled inside the app and run directly via `claude -p` — **nothing is installed** into your `~/.claude/skills` (fully self-contained).
 
+### Cloud setup & troubleshooting
+
+Usually you just pick **Cloud → Apply** and Pacer auto-detects your environment ID and registers. If it gets stuck:
+
+| Symptom | Fix |
+|---------|-----|
+| "no cloud environment" keeps showing | **Open claude.ai/code** → sign in / create an environment (once) → Apply again |
+| `404 not_found · model` | Update Claude Code (`claude`) |
+| Usage 0% / "Couldn't update" | Run `claude` once in a terminal → Refresh |
+
+Full setup & troubleshooting → **[docs/cloud-setup.md](docs/cloud-setup.md)**
+
 ---
 
 ## Menu card
