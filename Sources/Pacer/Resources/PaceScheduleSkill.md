@@ -28,9 +28,14 @@ ToolSearch select:RemoteTrigger
 ```
 auth 는 in-process — curl 쓰지 말 것.
 
-## 1. 기존 routine 찾기
+## 1. 기존 routine 찾기 + 환경ID 확보 (중요)
 
-`RemoteTrigger {action: "list"}` → `name == "pace-window-warm"` 항목의 `id` 를 확보(= `<tid>`). 없으면 미등록 상태.
+`RemoteTrigger {action: "list"}` 호출 후:
+- `name == "pace-window-warm"` 항목이 있으면 → 그 `id` = `<tid>`, 그 `job_config.ccr.environment_id` = `<env>`.
+- 없지만 **다른 trigger 가 하나라도 있으면** → 첫 항목의 `job_config.ccr.environment_id` 를 `<env>` 로 쓴다 (= 이 계정의 클라우드 환경).
+- **trigger 가 하나도 없으면** → `<env>` 를 알 수 없다. register 를 **중단**하고 4번 형식으로 `"ok":false, "reason":"no_env"` 출력. 환경ID 를 추측·하드코딩하지 말 것.
+
+> `<env>` 는 **반드시 이 list 응답에서 얻은 본인 계정 값**이어야 한다. 예시·타인 ID 를 쓰면 등록이 실패하거나 엉뚱한 환경을 가리킨다.
 
 ## 2. cron 변환 (KST → UTC)
 
@@ -91,17 +96,17 @@ auth 는 in-process — curl 쓰지 말 것.
 }
 ```
 
-> `environment_id` 가 계정에서 다르면 list/get 응답의 값을 재사용한다. `allowed_tools: []` 로 보내도 서버가 기본셋을 채우지만 프롬프트가 "도구 쓰지 말라"라 무해.
+> `environment_id` 는 **1번에서 list 로 확보한 `<env>`** 를 그대로 넣는다 (계정마다 다름 — 하드코딩 금지). `allowed_tools: []` 로 보내도 서버가 기본셋을 채우지만 프롬프트가 "도구 쓰지 말라"라 무해.
 
 ## 4. 결과 출력 — Pacer 파싱용 (필수)
 
 사람용 보고 1줄 뒤, **마지막 줄에 정확히 이 형식**으로 출력한다 (Pacer 가 grep `PACE_RESULT`):
 
 ```
-PACE_RESULT {"action":"<action>","ok":true,"id":"<trigger_id 또는 빈칸>","enabled":<true|false>,"next_run_at":"<UTC ISO 또는 빈칸>","cron":"<cron 또는 빈칸>"}
+PACE_RESULT {"action":"<action>","ok":true,"id":"<trigger_id 또는 빈칸>","enabled":<true|false>,"next_run_at":"<UTC ISO 또는 빈칸>","cron":"<cron 또는 빈칸>","reason":"<빈칸 또는 no_env 등>"}
 ```
 
-- 실패하거나 미등록이면 `"ok":false` 로.
+- 실패·미등록이면 `"ok":false`. 환경ID 를 못 찾은 경우(trigger 0개) `"reason":"no_env"` 포함 — 앱이 "클라우드 환경을 먼저 설정하세요" 안내에 사용한다.
 - `disable`/`enable`/`register`/`status` 모두 이 줄을 낸다.
 
 ## 참고 — 스케줄러 종류
