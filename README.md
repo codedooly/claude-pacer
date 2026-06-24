@@ -23,13 +23,7 @@
 **터미널 한 줄로 설치하세요.** 미서명 앱이라 브라우저로 받은 `.dmg` 는 macOS 보안(Gatekeeper)에 막힙니다 — curl 로 받으면 격리가 안 붙어 다운로드부터 `/Applications` 설치까지 한 번에 됩니다:
 
 ```sh
-osascript -e 'quit app "Pacer"' 2>/dev/null; M=$(mktemp -d) && \
-curl -fsSL https://github.com/codedooly/claude-pacer/releases/latest/download/Pacer.dmg -o /tmp/Pacer.dmg && \
-hdiutil attach -nobrowse -quiet -mountpoint "$M" /tmp/Pacer.dmg && \
-rm -rf /Applications/Pacer.app && \
-cp -R "$M/Pacer.app" /Applications/ && \
-hdiutil detach -quiet "$M" && \
-open -a Pacer
+osascript -e 'quit app "Pacer"' 2>/dev/null; M=$(mktemp -d) && curl -fsSL https://github.com/codedooly/claude-pacer/releases/latest/download/Pacer.dmg -o /tmp/Pacer.dmg && hdiutil attach -nobrowse -quiet -mountpoint "$M" /tmp/Pacer.dmg && rm -rf /Applications/Pacer.app && cp -R "$M/Pacer.app" /Applications/ && hdiutil detach -quiet "$M" && open -a Pacer
 ```
 
 > 이 명령은 **설치·업데이트 공용** — 새 버전이 나와도 그대로 다시 실행하면 됩니다 (기존 앱 종료 → 교체 → 재실행).

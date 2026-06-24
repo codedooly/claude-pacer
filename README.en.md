@@ -23,13 +23,7 @@
 **Install with one line.** Pacer is unsigned, so a browser-downloaded `.dmg` is blocked by macOS Gatekeeper — but a curl'd file isn't quarantined, so this downloads and installs to `/Applications` in one go:
 
 ```sh
-osascript -e 'quit app "Pacer"' 2>/dev/null; M=$(mktemp -d) && \
-curl -fsSL https://github.com/codedooly/claude-pacer/releases/latest/download/Pacer.dmg -o /tmp/Pacer.dmg && \
-hdiutil attach -nobrowse -quiet -mountpoint "$M" /tmp/Pacer.dmg && \
-rm -rf /Applications/Pacer.app && \
-cp -R "$M/Pacer.app" /Applications/ && \
-hdiutil detach -quiet "$M" && \
-open -a Pacer
+osascript -e 'quit app "Pacer"' 2>/dev/null; M=$(mktemp -d) && curl -fsSL https://github.com/codedooly/claude-pacer/releases/latest/download/Pacer.dmg -o /tmp/Pacer.dmg && hdiutil attach -nobrowse -quiet -mountpoint "$M" /tmp/Pacer.dmg && rm -rf /Applications/Pacer.app && cp -R "$M/Pacer.app" /Applications/ && hdiutil detach -quiet "$M" && open -a Pacer
 ```
 
 > This command **installs and updates** — just re-run it for new versions (quits the old app → replaces → relaunches).
