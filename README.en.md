@@ -138,7 +138,9 @@ The `pace-schedule` skill is bundled with the app and automatically installed to
 - **Mode chip**: Local=green / Cloud active=blue / Cloud disconnected=gray (`Check required`)
 - **Plan badge**: `Plan: Max (5x)` (Claude orange)
 - **Donut gauges**: 5-Hour · 7-Day — with reset countdown (clock icon)
-- **Bottom buttons / right-click menu**: Refresh · Settings · Quit (also opens by **right-clicking** the menu bar icon; disabled before login)
+- **Bottom buttons**: Refresh · Settings · Quit
+- **Right-click menu** (menu bar icon): Refresh · **Update** (self-update to the latest dmg) · **Help (About)** · Settings · Quit (Refresh/Settings disabled before login)
+- **About panel**: version · license · source link + **check for updates** (compares with the latest GitHub release → in-app update if newer)
 
 **Pace tab**
 A monthly calendar of ping history, color-coded by status:
@@ -190,7 +192,7 @@ If no Claude Code token is found in Keychain, the app shows a **"Connect Claude 
 
 ## Settings
 
-Changes in Settings take effect when you press **Done**. Closing with **X** discards any unsaved changes.
+Changes take effect when you press the large **Apply** button below the Local/Cloud tabs. Closing with **X** discards any unsaved changes.
 
 | Setting | Description |
 |---------|-------------|
@@ -216,6 +218,7 @@ Changes in Settings take effect when you press **Done**. Closing with **X** disc
 | Re-register | Delete and re-register the Routine |
 | Refresh | Update the Routine when ping times change |
 | Open web | Open the Claude Routine management page |
+| Environment ID input | If auto-detect finds 0 triggers, a field to paste your env ID from `/schedule` |
 
 ---
 
