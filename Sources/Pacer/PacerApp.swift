@@ -120,8 +120,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.icon = NSApp.applicationIconImage
         alert.messageText = "Pacer \(version)"
         alert.informativeText = tr(lang,
-            "Paces your Claude usage from the menu bar.\n\n© 2026 codedooly · MIT License · made by codedooly",
-            "메뉴바에서 Claude 사용량 페이스를 잡아줍니다.\n\n© 2026 codedooly · MIT 라이선스 · made by codedooly")
+            "Paces your Claude usage from the menu bar.\n\n© 2026 codedooly · MIT License",
+            "메뉴바에서 Claude 사용량 페이스를 잡아줍니다.\n\n© 2026 codedooly · MIT 라이선스")
         alert.addButton(withTitle: tr(lang, "Check for updates", "업데이트 확인"))
         alert.addButton(withTitle: "GitHub")
         alert.addButton(withTitle: tr(lang, "Close", "닫기"))
@@ -247,6 +247,9 @@ final class UsageModel: ObservableObject {
     @Published var pingMode: String = Config.load().mode
     @Published var holidays: Set<Date> = []
     @Published var authed: Bool = true
+
+    // 에러 있고 usage 가 한 번도 안 들어옴 = 첫 설치/인증 실패 (일시적 갱신 실패와 구분)
+    var needsConnectionHelp: Bool { error != nil && usage == nil }
 
     private let service = UsageService()
     private var lastFetch: Date?
@@ -435,15 +438,56 @@ struct MenuContent: View {
         .background(.ultraThinMaterial, in: Capsule())
     }
 
+    /// 첫 설치/인증 실패 시 복구 카드 — `claude` 한 번 실행해 토큰 갱신 유도.
+    private var connectionHelpCard: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                Text(tr(lang, "Can't reach Claude Code", "Claude Code 연결을 확인할 수 없어요"))
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                Spacer()
+            }
+            Text(tr(lang, "Run `claude` in your terminal once, then retry.", "터미널에서 `claude` 를 한 번 실행한 뒤 다시 시도하세요."))
+                .font(.system(size: 11))
+                .foregroundStyle(.white.opacity(0.8))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 8) {
+                // `claude` 클립보드 복사 (터미널에 붙여넣기 유도)
+                Button(tr(lang, "Copy `claude`", "`claude` 복사")) {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString("claude", forType: .string)
+                }
+                Button(tr(lang, "Retry", "다시 시도")) { Task { await model.refresh(force: true) } }
+                Spacer()
+            }
+            .font(.system(size: 11))
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity)
+        .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(Color.orange.opacity(0.4), lineWidth: 1)
+        )
+    }
+
     var body: some View {
         Group {
             if model.authed {
                 VStack(spacing: 12) {
+                    // 첫 설치/인증 실패: stale 토큰 → 복구 카드로 `claude` 실행 유도
+                    if model.needsConnectionHelp {
+                        connectionHelpCard
+                    }
                     // 카드(캘린더·도넛)는 항상 그린다. 사용량을 못 받으면(429 등) 흐리게 + 상태 배너만.
                     cardBody
                         .opacity(model.usage == nil ? 0.4 : 1)
                         .overlay(alignment: .center) {
-                            if model.usage == nil { statusBanner }
+                            // 일시적 갱신 실패(usage 존재)일 때만 배너. 첫 설치 실패는 위 복구 카드가 담당.
+                            if model.usage == nil && !model.needsConnectionHelp { statusBanner }
                         }
 
                     Divider()
