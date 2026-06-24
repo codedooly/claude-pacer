@@ -35,11 +35,11 @@ struct SettingsView: View {
         HStack {
             Spacer()
             Picker("Language", selection: $lang) {
-                Text("EN").tag("en")
+                Text("English").tag("en")
                 Text("한국어").tag("ko")
             }
             .pickerStyle(.segmented).labelsHidden()
-            .frame(width: 130)
+            .frame(width: 160)
         }
         .padding(.horizontal)
         .padding(.top, 8)
@@ -170,7 +170,7 @@ struct SettingsView: View {
                         }
                     }
                 } header: {
-                    Text("Claude Routine")
+                    Text(tr(lang, "Claude Routine", "Claude 루틴"))
                 } footer: {
                     Text(tr(lang,
                             "Pacer registers a cloud routine via Claude Code — runs even when your Mac is off.",
@@ -255,6 +255,12 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .scrollIndicators(.visible)   // 스크롤바 항상 표시 (하단 내용까지 보이게)
         .disabled(routineLoading)   // routine 동기화 중엔 전체 잠금
+        // 하단 페이드 — "더 있음" 힌트 (투명→배경색)
+        .overlay(alignment: .bottom) {
+            LinearGradient(colors: [.clear, Color(NSColor.windowBackgroundColor)], startPoint: .top, endPoint: .bottom)
+                .frame(height: 22)
+                .allowsHitTesting(false)
+        }
         }
         .tint(.pacerPurple)
         .frame(width: 380, height: clampedHeight) // 가로 + 내용 높이(화면 넘으면 클램프)

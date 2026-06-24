@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var cancellable: AnyCancellable?
     private var pingLogWindow: NSWindow?
     private var settingsWindow: NSWindow?
+    private var aboutWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // launchd 가 `Pacer --ping` 으로 부르면 핑만 쏘고 종료
@@ -112,24 +113,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Updater.currentVersion()
     }
 
-    /// Help → About 팝업 (버전·라이선스 + 업데이트 확인 / GitHub / 닫기).
+    /// Help → 커스텀 About 창 (버전·라이선스 + 업데이트 확인 / GitHub / 닫기).
     @objc private func menuHelp() {
         let lang = UserDefaults.standard.string(forKey: "pacerLang") ?? "en"
         let version = appVersion()
-        let alert = NSAlert()
-        alert.icon = NSApp.applicationIconImage
-        alert.messageText = "Pacer \(version)"
-        alert.informativeText = tr(lang,
-            "Paces your Claude usage from the menu bar.\n\n© 2026 codedooly · MIT License",
-            "메뉴바에서 Claude 사용량 페이스를 잡아줍니다.\n\n© 2026 codedooly · MIT 라이선스")
-        alert.addButton(withTitle: tr(lang, "Check for updates", "업데이트 확인"))
-        alert.addButton(withTitle: "GitHub")
-        alert.addButton(withTitle: tr(lang, "Close", "닫기"))
-        switch alert.runModal() {
-        case .alertFirstButtonReturn: checkForUpdates()
-        case .alertSecondButtonReturn: NSWorkspace.shared.open(URL(string: "https://github.com/codedooly/claude-pacer")!)
-        default: break
+        // 다크 톤 비-resizable 작은 창에 SwiftUI About 뷰 호스팅
+        if aboutWindow == nil {
+            let w = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 320, height: 240),
+                styleMask: [.titled, .closable, .fullSizeContentView],
+                backing: .buffered, defer: false
+            )
+            w.title = "Pacer"
+            w.titlebarAppearsTransparent = true
+            w.titleVisibility = .hidden
+            w.appearance = NSAppearance(named: .darkAqua)
+            w.isReleasedWhenClosed = false
+            w.isMovableByWindowBackground = true
+            let about = AboutView(
+                onCheckUpdate: { [weak self] in self?.checkForUpdates() },
+                onGitHub: { NSWorkspace.shared.open(URL(string: "https://github.com/codedooly/claude-pacer")!) },
+                onClose: { [weak self] in self?.aboutWindow?.performClose(nil) },
+                lang: lang,
+                version: version
+            )
+            let host = NSHostingController(rootView: about)
+            host.sizingOptions = [.preferredContentSize]
+            w.contentViewController = host
+            w.center()
+            aboutWindow = w
         }
+        popover.performClose(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        aboutWindow?.makeKeyAndOrderFront(nil)
     }
 
     /// GitHub 최신 릴리즈 태그를 받아 현재 버전과 semver 비교 → 업데이트 안내.
@@ -183,22 +199,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// 설정 창 — NSWindow 직접 관리 (메뉴 카드 버튼·우클릭 메뉴 공용).
     func openSettings() {
+        let lang = UserDefaults.standard.string(forKey: "pacerLang") ?? "en"
         if settingsWindow == nil {
             let w = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 380, height: 600),
                 styleMask: [.titled, .closable],
                 backing: .buffered, defer: false
             )
-            w.title = "Pacer Settings"
+            w.title = tr(lang, "Pacer Settings", "Pacer 설정")
             let host = NSHostingController(rootView: SettingsView())
             host.sizingOptions = [.preferredContentSize]
             w.contentViewController = host
             w.isReleasedWhenClosed = false
+            // 옮긴 위치 기억 — autosave 가 저장값을 자동 복원
+            w.setFrameAutosaveName("PacerSettingsWindow")
+            // 저장된 프레임이 없을 때(첫 오픈)만 메뉴바 아이콘 아래로 위치
+            if !w.setFrameUsingName("PacerSettingsWindow") {
+                positionUnderStatusItem(w)
+            }
             settingsWindow = w
         }
         popover.performClose(nil)
         NSApp.activate(ignoringOtherApps: true)
         settingsWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    /// 설정 창 우측 상단을 메뉴바 아이콘 바로 아래에 맞춘다 (화면 밖이면 clamp).
+    private func positionUnderStatusItem(_ w: NSWindow) {
+        // 메뉴바 버튼의 스크린 좌표
+        guard let buttonFrame = statusItem.button?.window?.frame else {
+            w.center()
+            return
+        }
+        let size = w.frame.size
+        var origin = NSPoint(
+            x: buttonFrame.maxX - size.width,        // 우측 상단이 버튼 아래
+            y: buttonFrame.minY - size.height - 6
+        )
+        // 화면(아이콘이 있는 스크린) 안으로 clamp
+        if let vis = (statusItem.button?.window?.screen ?? NSScreen.main)?.visibleFrame {
+            origin.x = min(max(origin.x, vis.minX), vis.maxX - size.width)
+            origin.y = min(max(origin.y, vis.minY), vis.maxY - size.height)
+        }
+        w.setFrameOrigin(origin)
     }
 
     @objc private func togglePopover() {
