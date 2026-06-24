@@ -10,11 +10,17 @@ Pacer 의 워밍 routine(`pace-window-warm`)을 `RemoteTrigger`(claude.ai code t
 
 ## ARGUMENTS 파싱
 
-`ARGUMENTS` 의 첫 토큰 = **action**, 둘째 토큰(있으면) = **핑 시각 CSV**.
+`ARGUMENTS` 의 첫 토큰 = **action**, 둘째 토큰(있으면) = **핑 시각 CSV**, 셋째 토큰(있으면) = **env_id**(선택).
+
+| 토큰 | 의미 |
+|------|------|
+| 1번 = action | `register` / `disable` / `enable` / `status` |
+| 2번 = 핑 시각 CSV | `register` 시 `08:00,13:00,18:00` 형식. 없으면 기본값 |
+| 3번 = env_id | (선택) 사용자가 `/schedule` 에서 복사한 환경ID. 있으면 환경 자동탐지보다 **최우선** 사용 |
 
 | action | 의미 |
 |--------|------|
-| `register <HH:MM,HH:MM,...>` | routine 생성/갱신 (기본). times 없으면 `08:00,13:00,18:00` |
+| `register <HH:MM,HH:MM,...> [env_id]` | routine 생성/갱신 (기본). times 없으면 `08:00,13:00,18:00`. env_id 있으면 그 환경에 등록 |
 | `disable` | routine 비활성 (`enabled=false`) |
 | `enable` | routine 재활성 (`enabled=true`) |
 | `status` | 현황 조회 |
@@ -30,10 +36,13 @@ auth 는 in-process — curl 쓰지 말 것.
 
 ## 1. 기존 routine 찾기 + 환경ID 확보 (중요)
 
-`RemoteTrigger {action: "list"}` 호출 후:
-- `name == "pace-window-warm"` 항목이 있으면 → 그 `id` = `<tid>`, 그 `job_config.ccr.environment_id` = `<env>`.
-- 없지만 **다른 trigger 가 하나라도 있으면** → 첫 항목의 `job_config.ccr.environment_id` 를 `<env>` 로 쓴다 (= 이 계정의 클라우드 환경).
-- **trigger 가 하나도 없으면** → `<env>` 를 알 수 없다. register 를 **중단**하고 4번 형식으로 `"ok":false, "reason":"no_env"` 출력. 환경ID 를 추측·하드코딩하지 말 것.
+먼저 **3번째 인자 env_id 가 넘어왔는지** 확인한 뒤, `RemoteTrigger {action: "list"}` 를 호출한다. `<env>` 결정 우선순위:
+
+1. **3번째 인자 env_id 가 있으면 → 그 값을 `<env>` 로 최우선 사용** (자동탐지 건너뜀). 단, list 응답에 `name == "pace-window-warm"` 항목이 있으면 그 `id` 는 여전히 `<tid>` 로 잡아 update 에 쓴다.
+2. 없으면 list 응답에서 추출:
+   - `name == "pace-window-warm"` 항목이 있으면 → 그 `id` = `<tid>`, 그 `job_config.ccr.environment_id` = `<env>`.
+   - 없지만 **다른 trigger 가 하나라도 있으면** → 첫 항목의 `job_config.ccr.environment_id` 를 `<env>` 로 쓴다 (= 이 계정의 클라우드 환경).
+3. 그래도 못 찾으면(3번째 인자도 없고 **trigger 가 하나도 없음**) → `<env>` 를 알 수 없다. register 를 **중단**하고 4번 형식으로 `"ok":false, "reason":"no_env"` 출력. 환경ID 를 추측·하드코딩하지 말 것.
 
 > `<env>` 는 **반드시 이 list 응답에서 얻은 본인 계정 값**이어야 한다. 예시·타인 ID 를 쓰면 등록이 실패하거나 엉뚱한 환경을 가리킨다.
 

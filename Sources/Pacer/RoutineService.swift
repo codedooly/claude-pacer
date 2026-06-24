@@ -15,11 +15,14 @@ struct PaceResult {
 enum RoutineService {
     /// @param action register | disable | enable | status
     /// @param times  register 시 핑 시각 ["08:00", ...] (그 외 무시)
+    /// @param env    (선택) 사용자가 `/schedule` 에서 복사한 env_id — 환경 자동탐지 실패(no_env) 대비
     /// @returns 파싱된 PaceResult (실패 시 nil)
-    static func run(_ action: String, times: [String] = []) async -> PaceResult? {
-        let arg = times.isEmpty
-            ? "/pace-schedule \(action)"
-            : "/pace-schedule \(action) \(times.sorted().joined(separator: ","))"
+    static func run(_ action: String, times: [String] = [], env: String = "") async -> PaceResult? {
+        // /pace-schedule <action> <times> <env> — env 는 3번째 토큰(선택)
+        let timesArg = times.isEmpty ? "" : times.sorted().joined(separator: ",")
+        let arg = ["/pace-schedule", action, timesArg, env]
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
 
         let p = Process()
         p.executableURL = URL(fileURLWithPath: PingRunner.claudePath())

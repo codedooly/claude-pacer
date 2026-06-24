@@ -16,6 +16,7 @@ struct SettingsView: View {
     @AppStorage("pacerLang") private var lang = "en"
     @AppStorage("routineTimes") private var routineTimes = ""   // 등록된 routine 핑 시각 CSV. 빈 = 미등록
     @AppStorage("routineHealthy") private var routineHealthy = true   // 마지막 status 결과: 클라우드에 routine 존재+enabled
+    @AppStorage("cloudEnvId") private var cloudEnvId = ""   // no_env 시 사용자가 `/schedule` 에서 붙여넣는 환경ID
     @State private var launchAtLogin = FileManager.default.fileExists(atPath: NSHomeDirectory() + "/Library/LaunchAgents/com.dooly.pacer.launch.plist")
 
     init() {
@@ -43,6 +44,10 @@ struct SettingsView: View {
                 HStack {
                     Text(tr(lang, "Ping method", "핑 방식"))
                     Spacer()
+                    // 최신 버전으로 교체·재시작 (Done 로직과 무관한 순수 추가)
+                    Button(tr(lang, "Update", "업데이트")) { Updater.runUpdate() }
+                        .buttonStyle(.bordered)
+                        .controlSize(.regular)
                     Button {
                         // 모드 변경 OR (Cloud에서) 핑 변경 → 동기화 후 닫기, 아니면 바로 닫기
                         let pingChanged = mode == "cloud" && !routineTimes.isEmpty && routineTimes != currentCSV
@@ -125,6 +130,18 @@ struct SettingsView: View {
                             Text(syncError)
                                 .font(.system(size: 11))
                                 .foregroundStyle(.red)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        // no_env 안내 중이거나 이미 env 를 입력한 경우 → 직접 붙여넣기 필드 노출 (다시 Done 누르면 이 env 로 등록)
+                        if syncError != nil || !cloudEnvId.isEmpty {
+                            TextField("env_...", text: $cloudEnvId)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.system(size: 11, design: .monospaced))
+                            Text(tr(lang,
+                                    "Paste your environment ID from `/schedule`",
+                                    "터미널 `/schedule` 에서 본 환경ID 를 붙여넣으세요"))
+                                .font(.system(size: 10.5))
+                                .foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                     }
@@ -315,7 +332,8 @@ struct SettingsView: View {
     private func registerRoutine() async -> Bool {
         routineLoading = true
         let times = hours.sorted().map { String(format: "%02d:00", $0) }
-        let r = await RoutineService.run("register", times: times)
+        // cloudEnvId 비어있으면 빈 문자열 → 스킬이 환경 자동탐지. 있으면 그 env 로 최우선 등록.
+        let r = await RoutineService.run("register", times: times, env: cloudEnvId.trimmingCharacters(in: .whitespaces))
         let ok = r?.ok ?? false
         if ok {
             syncError = nil
