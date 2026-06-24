@@ -20,7 +20,7 @@
 
 ## ⚡ 빠른 설치
 
-**터미널 한 줄** — 다운로드부터 `/Applications` 설치까지 한 번에 (curl 로 받은 파일은 Gatekeeper 격리가 안 붙어 바로 실행됩니다):
+**터미널 한 줄로 설치하세요.** 미서명 앱이라 브라우저로 받은 `.dmg` 는 macOS 보안(Gatekeeper)에 막힙니다 — curl 로 받으면 격리가 안 붙어 다운로드부터 `/Applications` 설치까지 한 번에 됩니다:
 
 ```sh
 curl -fsSL https://github.com/codedooly/claude-pacer/releases/latest/download/Pacer.dmg -o /tmp/Pacer.dmg \
@@ -29,8 +29,6 @@ curl -fsSL https://github.com/codedooly/claude-pacer/releases/latest/download/Pa
   && hdiutil detach -quiet "/Volumes/Pacer" \
   && echo "✓ /Applications/Pacer.app — Launchpad 에서 실행"
 ```
-
-GUI 가 편하면 → **[최신 .dmg 직접 받기](https://github.com/codedooly/claude-pacer/releases/latest)** 후 `Pacer` 를 Applications 로 드래그.
 
 > 실행하려면 [Claude Code](https://claude.com/claude-code) 설치·로그인이 먼저입니다 → 아래 [요구사항](#요구사항) · 소스에서 빌드하려면 → [설치](#설치)
 

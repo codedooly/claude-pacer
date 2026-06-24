@@ -14,19 +14,13 @@
 &nbsp;![license](https://img.shields.io/badge/license-MIT-7C3AED?style=flat-square)
 &nbsp;![swift](https://img.shields.io/badge/Swift-SwiftUI-orange?style=flat-square)
 
-<br/>
-
-[![Quick install](https://img.shields.io/badge/⚡_Quick_install-latest_.dmg-7C3AED?style=for-the-badge)](https://github.com/codedooly/claude-pacer/releases/latest)
-
-Download, drag to Applications, done · new here? read on ↓
-
 </div>
 
 ---
 
 ## ⚡ Quick install
 
-**One line** — downloads and installs to `/Applications` in one go (curl'd files aren't Gatekeeper-quarantined, so it just opens):
+**Install with one line.** Pacer is unsigned, so a browser-downloaded `.dmg` is blocked by macOS Gatekeeper — but a curl'd file isn't quarantined, so this downloads and installs to `/Applications` in one go:
 
 ```sh
 curl -fsSL https://github.com/codedooly/claude-pacer/releases/latest/download/Pacer.dmg -o /tmp/Pacer.dmg \
@@ -35,8 +29,6 @@ curl -fsSL https://github.com/codedooly/claude-pacer/releases/latest/download/Pa
   && hdiutil detach -quiet "/Volumes/Pacer" \
   && echo "✓ /Applications/Pacer.app — launch from Launchpad"
 ```
-
-Prefer a GUI? → **[Download the latest .dmg](https://github.com/codedooly/claude-pacer/releases/latest)**, then drag `Pacer` to Applications.
 
 > Requires [Claude Code](https://claude.com/claude-code) installed & logged in → [Requirements](#requirements) below · building from source → [Install](#install)
 
