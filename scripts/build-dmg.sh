@@ -7,7 +7,8 @@ cd "$REPO"
 
 echo "▸ Building Pacer.app (Release)…"
 xcodegen generate
-xcodebuild -project Pacer.xcodeproj -scheme Pacer -configuration Release -derivedDataPath ./build build >/dev/null
+xcodebuild -project Pacer.xcodeproj -scheme Pacer -configuration Release -derivedDataPath ./build \
+  ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO build >/dev/null
 
 APP="build/Build/Products/Release/Pacer.app"
 DMG="build/Pacer.dmg"
