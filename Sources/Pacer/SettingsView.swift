@@ -40,28 +40,28 @@ struct SettingsView: View {
                 .pickerStyle(.segmented).labelsHidden()
                 .frame(maxWidth: .infinity)
                 .tint(mode == "cloud" ? .blue : .green)
-            } header: {
-                HStack {
-                    Text(tr(lang, "Ping method", "핑 방식"))
-                    Spacer()
-                    Button {
-                        // 모드 변경 OR (Cloud에서) 핑 변경 → 동기화 후 닫기, 아니면 바로 닫기
-                        let pingChanged = mode == "cloud" && !routineTimes.isEmpty && routineTimes != currentCSV
-                        if mode != initialMode || pingChanged { startSyncAndClose() }
-                        else { window?.performClose(nil) }
-                    } label: {
-                        if syncing {
-                            // 완료 버튼 안에 카운트다운 (10→1), 그 뒤엔 스피너
-                            if syncCountdown > 0 { Text("\(syncCountdown)").monospacedDigit() }
-                            else { ProgressView().controlSize(.small) }
-                        } else {
-                            Text(tr(lang, "Done", "완료"))
-                        }
+
+                // 1차 CTA — 설정 확정 + (Cloud) routine 동기화 후 닫기. 동기화 중 카운트다운 표시.
+                Button {
+                    // 모드 변경 OR (Cloud에서) 핑 변경 → 동기화 후 닫기, 아니면 바로 닫기
+                    let pingChanged = mode == "cloud" && !routineTimes.isEmpty && routineTimes != currentCSV
+                    if mode != initialMode || pingChanged { startSyncAndClose() }
+                    else { window?.performClose(nil) }
+                } label: {
+                    if syncing {
+                        // 적용 버튼 안에 카운트다운 (10→1), 그 뒤엔 스피너
+                        if syncCountdown > 0 { Text("\(syncCountdown)").monospacedDigit() }
+                        else { ProgressView().controlSize(.small) }
+                    } else {
+                        Text(tr(lang, "Apply", "적용"))
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.regular)
-                    .disabled(syncing)
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .frame(maxWidth: .infinity)
+                .disabled(syncing)
+            } header: {
+                Text(tr(lang, "Ping method", "핑 방식"))
             } footer: {
                 Text(methodFooter)
             }
