@@ -1,0 +1,130 @@
+<svg width="1000" height="540" viewBox="0 0 1000 540" fill="none" xmlns="http://www.w3.org/2000/svg" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+  <defs>
+    <linearGradient id="fresh" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#b07bff"/>
+      <stop offset="1" stop-color="#7c3aed"/>
+    </linearGradient>
+    <linearGradient id="tired" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6f6b80"/>
+      <stop offset="1" stop-color="#4c485a"/>
+    </linearGradient>
+    <linearGradient id="winFresh" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7c3aed"/>
+      <stop offset="1" stop-color="#5b27b0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- panel -->
+  <rect x="1" y="1" width="998" height="538" rx="24" fill="#17171c" stroke="#2a2a32" stroke-width="1.5"/>
+  <line x1="40" y1="270" x2="960" y2="270" stroke="#26262e" stroke-width="1.5"/>
+
+  <!-- ============ ROW A — without ping (tired, 1 window) ============ -->
+  <!-- ✕ badge -->
+  <circle cx="60" cy="158" r="20" fill="#3a1d22" stroke="#ff6b6b" stroke-width="2"/>
+  <path d="M52 150 L68 166 M68 150 L52 166" stroke="#ff6b6b" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- tired mascot -->
+  <g transform="translate(168,158) rotate(-3)">
+    <rect x="-58" y="-58" width="116" height="116" rx="38" fill="url(#tired)"/>
+    <ellipse cx="0" cy="-30" rx="44" ry="22" fill="#ffffff" opacity="0.05"/>
+    <!-- droopy eyes -->
+    <path d="M-34 -6 Q-24 6 -14 -6" stroke="#dcdce4" stroke-width="5" fill="none" stroke-linecap="round"/>
+    <path d="M14 -6 Q24 6 34 -6" stroke="#dcdce4" stroke-width="5" fill="none" stroke-linecap="round"/>
+    <!-- flat/frown mouth -->
+    <path d="M-15 26 Q0 18 15 26" stroke="#dcdce4" stroke-width="5" fill="none" stroke-linecap="round"/>
+    <!-- sweat -->
+    <path d="M44 -36 C44 -36 36 -24 36 -18 a8 8 0 0 0 16 0 C52 -24 44 -36 44 -36 Z" fill="#8fd4ff"/>
+    <!-- zzz -->
+    <text x="50" y="-50" font-size="16" fill="#6f6b80">z</text>
+    <text x="64" y="-62" font-size="12" fill="#6f6b80">z</text>
+  </g>
+
+  <!-- timeline: one good window 09–14, then dead -->
+  <rect x="344" y="126" width="220" height="64" rx="12" fill="url(#winFresh)"/>
+  <circle cx="372" cy="158" r="9" fill="#ffd86b"/>
+  <g stroke="#ffd86b" stroke-width="2" stroke-linecap="round">
+    <line x1="372" y1="143" x2="372" y2="139"/><line x1="372" y1="177" x2="372" y2="173"/>
+    <line x1="357" y1="158" x2="353" y2="158"/><line x1="387" y1="158" x2="391" y2="158"/>
+  </g>
+  <text x="398" y="164" font-size="17" fill="#f0e9ff">09–14</text>
+
+  <!-- dead afternoon -->
+  <rect x="580" y="132" width="380" height="52" rx="12" fill="none" stroke="#3a3a44" stroke-width="1.5" stroke-dasharray="6 7"/>
+  <text x="770" y="164" font-size="15" fill="#5a5a66" text-anchor="middle">no fresh window · 14:00→</text>
+
+  <!-- energy pips: 1 of 3 -->
+  <circle cx="120" cy="232" r="7" fill="#8a8696"/>
+  <circle cx="146" cy="232" r="7" fill="none" stroke="#44414f" stroke-width="2"/>
+  <circle cx="172" cy="232" r="7" fill="none" stroke="#44414f" stroke-width="2"/>
+  <text x="196" y="237" font-size="15" fill="#7a7686">~1 window / day</text>
+
+  <!-- ============ ROW B — aligned ping (fresh, 3 windows) ============ -->
+  <!-- ✓ badge -->
+  <circle cx="60" cy="382" r="20" fill="#241540" stroke="#a855f7" stroke-width="2"/>
+  <path d="M51 382 L58 390 L70 374" stroke="#a855f7" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- fresh mascot -->
+  <g transform="translate(168,382)">
+    <!-- motion dashes -->
+    <g stroke="#7c3aed" stroke-width="4" stroke-linecap="round" opacity="0.7">
+      <line x1="-78" y1="-16" x2="-62" y2="-16"/>
+      <line x1="-86" y1="2" x2="-64" y2="2"/>
+      <line x1="-78" y1="20" x2="-62" y2="20"/>
+    </g>
+    <rect x="-58" y="-58" width="116" height="116" rx="38" fill="url(#fresh)"/>
+    <ellipse cx="0" cy="-30" rx="44" ry="22" fill="#ffffff" opacity="0.12"/>
+    <!-- big happy eyes -->
+    <circle cx="-22" cy="-8" r="16" fill="#fff"/>
+    <circle cx="24" cy="-8" r="16" fill="#fff"/>
+    <circle cx="-18" cy="-5" r="8" fill="#2a0f4d"/>
+    <circle cx="28" cy="-5" r="8" fill="#2a0f4d"/>
+    <circle cx="-21" cy="-10" r="3" fill="#fff"/>
+    <circle cx="25" cy="-10" r="3" fill="#fff"/>
+    <!-- open smile -->
+    <path d="M-20 20 Q0 44 20 20 Z" fill="#2a0f4d"/>
+    <path d="M-20 20 Q0 30 20 20" stroke="#ff7ec8" stroke-width="0" fill="#ff5fb6" opacity="0.9"/>
+    <!-- blush -->
+    <ellipse cx="-40" cy="14" rx="9" ry="5" fill="#ff8ad6" opacity="0.55"/>
+    <ellipse cx="42" cy="14" rx="9" ry="5" fill="#ff8ad6" opacity="0.55"/>
+    <!-- sparkle -->
+    <path d="M64 -60 L68 -50 L78 -46 L68 -42 L64 -32 L60 -42 L50 -46 L60 -50 Z" fill="#ffe27a"/>
+  </g>
+
+  <!-- 3 fresh windows -->
+  <g>
+    <!-- block template repeated -->
+    <g>
+      <rect x="300" y="350" width="206" height="64" rx="12" fill="url(#winFresh)"/>
+      <circle cx="326" cy="382" r="9" fill="#ffd86b"/>
+      <g stroke="#ffd86b" stroke-width="2" stroke-linecap="round">
+        <line x1="326" y1="367" x2="326" y2="363"/><line x1="326" y1="401" x2="326" y2="397"/>
+        <line x1="311" y1="382" x2="307" y2="382"/><line x1="341" y1="382" x2="345" y2="382"/>
+      </g>
+      <text x="352" y="388" font-size="17" fill="#f0e9ff">↺ 08</text>
+    </g>
+    <g>
+      <rect x="520" y="350" width="206" height="64" rx="12" fill="url(#winFresh)"/>
+      <circle cx="546" cy="382" r="9" fill="#ffd86b"/>
+      <g stroke="#ffd86b" stroke-width="2" stroke-linecap="round">
+        <line x1="546" y1="367" x2="546" y2="363"/><line x1="546" y1="401" x2="546" y2="397"/>
+        <line x1="531" y1="382" x2="527" y2="382"/><line x1="561" y1="382" x2="565" y2="382"/>
+      </g>
+      <text x="572" y="388" font-size="17" fill="#f0e9ff">↺ 13</text>
+    </g>
+    <g>
+      <rect x="740" y="350" width="206" height="64" rx="12" fill="url(#winFresh)"/>
+      <circle cx="766" cy="382" r="9" fill="#ffd86b"/>
+      <g stroke="#ffd86b" stroke-width="2" stroke-linecap="round">
+        <line x1="766" y1="367" x2="766" y2="363"/><line x1="766" y1="401" x2="766" y2="397"/>
+        <line x1="751" y1="382" x2="747" y2="382"/><line x1="781" y1="382" x2="785" y2="382"/>
+      </g>
+      <text x="792" y="388" font-size="17" fill="#f0e9ff">↺ 18</text>
+    </g>
+  </g>
+
+  <!-- energy pips: 3 of 3 -->
+  <circle cx="120" cy="456" r="7" fill="#a855f7"/>
+  <circle cx="146" cy="456" r="7" fill="#a855f7"/>
+  <circle cx="172" cy="456" r="7" fill="#a855f7"/>
+  <text x="196" y="461" font-size="15" fill="#c9b6ff">fresh each core block</text>
+</svg>
