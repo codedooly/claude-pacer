@@ -104,12 +104,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func menuRefresh() { Task { await model.refresh(force: true) } }
     @objc private func menuSettings() { openSettings() }
-    @objc private func menuUpdate() { Updater.runUpdate() }
+    @objc private func menuUpdate() {
+        // 최신 버전 fetch → 현재→최신 화살표 확인 팝업 → 업데이트
+        Updater.fetchLatest { [weak self] latest in
+            guard self != nil else { return }
+            Updater.runUpdate(latest: latest)
+        }
+    }
     @objc private func menuQuit() { NSApp.terminate(nil) }
 
     /// 현재 앱 버전 (CFBundleShortVersionString).
     private func appVersion() -> String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        Updater.currentVersion()
     }
 
     /// Help → About 팝업 (버전·라이선스 + 업데이트 확인 / GitHub / 닫기).
@@ -136,18 +142,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func checkForUpdates() {
         let lang = UserDefaults.standard.string(forKey: "pacerLang") ?? "en"
         let current = appVersion()
-        let url = URL(string: "https://api.github.com/repos/codedooly/claude-pacer/releases/latest")!
-        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
-            // tag_name(예 "v1.1.0") 파싱 → 앞의 v 제거
-            let latest: String? = data
-                .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
-                .flatMap { $0["tag_name"] as? String }
-                .map { $0.hasPrefix("v") ? String($0.dropFirst()) : $0 }
-            DispatchQueue.main.async {
-                guard let self else { return }
-                self.presentUpdateResult(latest: latest, current: current, lang: lang)
-            }
-        }.resume()
+        // 최신 버전 fetch (공용 헬퍼) → 결과 표시
+        Updater.fetchLatest { [weak self] latest in
+            guard let self else { return }
+            self.presentUpdateResult(latest: latest, current: current, lang: lang)
+        }
     }
 
     /// checkForUpdates 결과를 NSAlert 로 표시 (메인스레드).
@@ -164,14 +163,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         // semver 비교 (major.minor.patch 숫자)
         if Self.isNewer(latest, than: current) {
-            let a = NSAlert()
-            a.messageText = "Pacer"
-            a.informativeText = tr(lang,
-                "Version \(latest) is available. Update now?",
-                "새 버전 \(latest) 이 있습니다. 지금 업데이트할까요?")
-            a.addButton(withTitle: tr(lang, "Update", "업데이트"))
-            a.addButton(withTitle: tr(lang, "Cancel", "취소"))
-            if a.runModal() == .alertFirstButtonReturn { Updater.runUpdate() }
+            // 새 버전 → 화살표 확인 팝업 하나만 (이중 팝업 금지)
+            Updater.runUpdate(latest: latest)
         } else {
             let a = NSAlert()
             a.messageText = "Pacer"

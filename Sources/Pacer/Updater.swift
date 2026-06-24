@@ -4,16 +4,44 @@ import AppKit
 /// 헬퍼 스크립트를 detached 로 띄우고 앱이 종료되면, 스크립트가 Pacer 종료를 기다렸다가
 /// 최신 dmg 를 받아 /Applications/Pacer.app 을 교체하고 재실행한다.
 enum Updater {
+    /// GitHub 최신 릴리즈 태그(tag_name) fetch — 앞의 v 제거. 두 진입점 공용.
+    /// @param completion 메인스레드에서 최신 버전(없으면 nil) 전달
+    static func fetchLatest(completion: @escaping (String?) -> Void) {
+        let url = URL(string: "https://api.github.com/repos/codedooly/claude-pacer/releases/latest")!
+        URLSession.shared.dataTask(with: url) { data, _, _ in
+            // tag_name(예 "v1.1.0") 파싱 → 앞의 v 제거
+            let latest: String? = data
+                .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+                .flatMap { $0["tag_name"] as? String }
+                .map { $0.hasPrefix("v") ? String($0.dropFirst()) : $0 }
+            DispatchQueue.main.async { completion(latest) }
+        }.resume()
+    }
+
+    /// 현재 앱 버전 (CFBundleShortVersionString).
+    static func currentVersion() -> String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+    }
+
     /// 확인창 → 헬퍼 스크립트 작성·실행 → 앱 종료. 스크립트가 교체·재실행을 마무리한다.
-    @MainActor static func runUpdate() {
+    /// @param latest 최신 버전 (알면 현재→최신 화살표 표시, 모르면 일반 문구)
+    @MainActor static func runUpdate(latest: String? = nil) {
         let lang = UserDefaults.standard.string(forKey: "pacerLang") ?? "en"
+        let current = currentVersion()
 
         // 확인창 — Update 가 아니면 중단
         let alert = NSAlert()
         alert.messageText = "Pacer 업데이트"
-        alert.informativeText = tr(lang,
-            "Download the latest version and restart?",
-            "최신 버전을 받아 재시작합니다. 계속할까요?")
+        // 최신을 알면 현재→최신 화살표, 모르면(네트워크 실패) 기존 일반 문구
+        if let latest {
+            alert.informativeText = tr(lang,
+                "Current  \(current)  →  Latest  \(latest)\n\nDownload and restart?",
+                "현재  \(current)  →  최신  \(latest)\n\n받아서 재시작합니다. 계속할까요?")
+        } else {
+            alert.informativeText = tr(lang,
+                "Download the latest version and restart?",
+                "최신 버전을 받아 재시작합니다. 계속할까요?")
+        }
         alert.addButton(withTitle: tr(lang, "Update", "업데이트"))
         alert.addButton(withTitle: tr(lang, "Cancel", "취소"))
         guard alert.runModal() == .alertFirstButtonReturn else { return }
