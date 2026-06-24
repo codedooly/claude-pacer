@@ -140,7 +140,7 @@ Usually you just pick **Cloud → Apply** and Pacer auto-detects your environmen
 | `404 not_found · model` | Update Claude Code (`claude`) |
 | Usage 0% / "Couldn't update" | Run `claude` once in a terminal → Refresh |
 
-Full setup & troubleshooting → **[docs/cloud-setup.md](docs/cloud-setup.md)**
+Full setup & troubleshooting → **[docs/cloud-setup.en.md](docs/cloud-setup.en.md)**
 
 ---
 
