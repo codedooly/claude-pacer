@@ -1,0 +1,15 @@
+.DS_Store
+*.log
+
+# Xcode — project is generated from project.yml by xcodegen
+*.xcodeproj/
+build/
+DerivedData/
+.build/
+*.xcuserstate
+
+# 스크린샷 원본 캡처 (frame-shots.py 입력)
+assets/raw/
+
+# dmg 산출물
+*.dmg
