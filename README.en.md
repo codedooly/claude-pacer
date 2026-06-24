@@ -104,7 +104,7 @@ Choose **Cloud** if you want pings to fire even when your Mac is off. Choose **L
 | Fires when Mac is off | ✗ (Mac must be on) | ✓ (fires from Anthropic's cloud) |
 | Pace log accuracy | ✓ Exact (PingRunner records directly) | △ Approximate (inferred from `resets_at` in usage API) |
 | Skip weekends & holidays | ✓ (Korean holidays via local lunar calendar) | ✗ (fires daily — cron can't filter specific dates) |
-| How pings are automated | launchd LaunchAgent | Claude Routine — Pacer auto-registers a RemoteTrigger via `claude -p "/pace-schedule"` |
+| How pings are automated | launchd LaunchAgent | Claude Routine — Pacer runs its bundled instructions via `claude -p` to auto-register a RemoteTrigger |
 | Mode switch takes effect | Immediately (launchd reinstalled) | When you tap **Done** — routine registered/deactivated (a few seconds) |
 | Requires Claude Code (claude CLI) | ✓ (to fire pings) | ✓ (to register routine and fire pings) |
 
@@ -122,13 +122,13 @@ A launchd LaunchAgent fires `claude -p "ok"` at your scheduled times to open a f
 
 ### Window alignment — Cloud mode
 
-Pacer calls `claude -p "/pace-schedule"` to **automatically register a Claude Routine (RemoteTrigger cloud cron)**. Registration typically takes ~15s (up to 60s), with a countdown shown in Settings. Once registered, Anthropic's cloud fires pings at the scheduled times — even when your Mac is off. Weekend/holiday skipping is not possible due to cron limitations. Pace log timestamps are approximated by inferring `resets_at` jumps from the usage API.
+Pacer runs its bundled routine-registration instructions via `claude -p` to **automatically register a Claude Routine (RemoteTrigger cloud cron)**. Registration typically takes ~15s (up to 60s), with a countdown shown in Settings. Once registered, Anthropic's cloud fires pings at the scheduled times — even when your Mac is off. Weekend/holiday skipping is not possible due to cron limitations. Pace log timestamps are approximated by inferring `resets_at` jumps from the usage API.
 
 Routine status (registered / disconnected / needs renewal) is detected automatically on app launch and whenever you open Settings. If the Routine is deleted from the web or expires, the mode chip turns **gray ("Check required")**.
 
-### pace-schedule skill
+### Routine instructions (bundled)
 
-The `pace-schedule` skill is bundled with the app and automatically installed to `~/.claude/skills` on first launch.
+The instructions that register/update the routine are bundled inside the app and run directly via `claude -p` — **nothing is installed** into your `~/.claude/skills` (fully self-contained).
 
 ---
 
@@ -180,7 +180,7 @@ open build/Build/Products/Release/Pacer.app
 ./scripts/build-dmg.sh      # → build/Pacer.dmg
 ```
 
-On first run macOS may prompt for **Keychain access** → **Always Allow**. The `pace-schedule` skill is installed automatically on first launch. (Unsigned, so a *downloaded* dmg needs **right-click → Open** the first time.)
+On first run macOS may prompt for **Keychain access** → **Always Allow**. (Unsigned, so a *downloaded* dmg needs **right-click → Open** the first time.)
 
 ### Onboarding
 

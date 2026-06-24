@@ -104,7 +104,7 @@ Pacer 는 **Claude Code CLI** 위에서 동작합니다 — 설치해 쓰는 사
 | 맥이 꺼져 있어도 발화 | ✗ (맥이 켜져 있어야) | ✓ (Anthropic 클라우드에서 발화) |
 | Pace log 정확도 | ✓ 정확 (PingRunner 가 직접 기록) | △ 근사 (usage 의 `resets_at` 역산) |
 | 주말·공휴일 스킵 | ✓ (한국 공휴일은 로컬 음력 계산) | ✗ (매일 발화 — cron 으로는 특정일 제외 불가) |
-| 핑 자동화 방식 | launchd LaunchAgent | Claude Routine — Pacer 가 `claude -p "/pace-schedule"` 로 RemoteTrigger 자동 등록 |
+| 핑 자동화 방식 | launchd LaunchAgent | Claude Routine — Pacer 가 번들 내장 지침을 `claude -p` 로 실행해 RemoteTrigger 자동 등록 |
 | 모드 전환 적용 시점 | 즉시 (launchd 재설치) | **Done** 탭 시 확정 — routine 등록/비활성 동기화 (수 초) |
 | Claude Code (claude CLI) 필요 | ✓ (핑 발사) | ✓ (routine 등록·발화) |
 
@@ -122,13 +122,13 @@ launchd LaunchAgent 가 설정한 시각에 `claude -p "ok"` 를 실행해 새 5
 
 ### 창 정렬 — Cloud 모드
 
-Pacer 가 `claude -p "/pace-schedule"` 로 **Claude Routine(RemoteTrigger 클라우드 cron)을 자동 등록**합니다. 등록 중 Settings 에 카운트다운이 표시되며 보통 ~15초(최대 60초) 걸립니다. 등록 후에는 맥이 꺼져 있어도 Anthropic 클라우드가 정해진 시각에 핑을 발화합니다. 단, cron 특성상 주말·공휴일 스킵은 불가합니다. Pace log 는 usage API 의 `resets_at` 점프를 역산해 근사 기록합니다.
+Pacer 가 앱 번들에 내장된 routine 등록 지침을 `claude -p` 로 실행해 **Claude Routine(RemoteTrigger 클라우드 cron)을 자동 등록**합니다. 등록 중 Settings 에 카운트다운이 표시되며 보통 ~15초(최대 60초) 걸립니다. 등록 후에는 맥이 꺼져 있어도 Anthropic 클라우드가 정해진 시각에 핑을 발화합니다. 단, cron 특성상 주말·공휴일 스킵은 불가합니다. Pace log 는 usage API 의 `resets_at` 점프를 역산해 근사 기록합니다.
 
 Cloud Routine 의 상태(등록됨 / 끊김 / 갱신 필요)는 앱 시작 시·Settings 열 때 자동 감지합니다. 웹에서 Routine 을 직접 삭제하거나 만료된 경우 모드 칩이 **회색("확인 필요")** 으로 전환됩니다.
 
-### pace-schedule 스킬
+### routine 등록 지침 (번들 내장)
 
-`pace-schedule` 스킬은 앱 번들에 내장되어 있으며, 앱 설치 시 사용자의 `~/.claude/skills` 에 자동 설치됩니다.
+routine 을 등록·갱신하는 지침이 앱 번들에 내장되어 있고, Cloud 등록 시 `claude -p` 로 **직접 실행**됩니다 — 사용자 `~/.claude/skills` 에 아무것도 설치하지 않는 **자체 완결** 방식입니다.
 
 ---
 
@@ -180,7 +180,7 @@ open build/Build/Products/Release/Pacer.app
 ./scripts/build-dmg.sh      # → build/Pacer.dmg
 ```
 
-첫 실행 시 macOS 가 **Keychain 접근**을 물으면 → **항상 허용**. `pace-schedule` 스킬은 첫 실행 때 자동 설치됩니다. (미서명이라 *다운로드*한 dmg 설치본은 첫 실행만 **우클릭 → 열기**)
+첫 실행 시 macOS 가 **Keychain 접근**을 물으면 → **항상 허용**. (미서명이라 *다운로드*한 dmg 설치본은 첫 실행만 **우클릭 → 열기**)
 
 ### 온보딩
 
