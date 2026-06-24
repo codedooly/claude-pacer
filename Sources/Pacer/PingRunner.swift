@@ -34,8 +34,8 @@ enum PingRunner {
     private static func fireClaude() -> Bool {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: claudePath())
-        // 모델 명시(haiku) — 기본 모델 의존 회피(은퇴 모델 404 방지) + 핑은 저렴 모델로 충분
-        p.arguments = ["--model", "haiku", "-p", "ok"]
+        // 현재 모델 ID 직접 지정 — 단축 alias 는 구버전 CLI 에서 은퇴 스냅샷으로 풀려 404. 핑은 저렴 모델로 충분
+        p.arguments = ["--model", "claude-haiku-4-5-20251001", "-p", "ok"]
         p.standardOutput = Pipe()
         p.standardError = Pipe()
         do { try p.run() } catch { return false }

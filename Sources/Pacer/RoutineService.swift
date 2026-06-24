@@ -27,8 +27,9 @@ enum RoutineService {
 
         let p = Process()
         p.executableURL = URL(fileURLWithPath: PingRunner.claudePath())
-        // 모델 명시 — 사용자 CLI 기본 모델이 은퇴 스냅샷이면 404 나므로 alias 로 고정 (은퇴 안 됨)
-        p.arguments = ["--model", "sonnet", "-p", arg]
+        // 현재 모델 ID 직접 지정 — CLI 의 sonnet/haiku 단축 alias 는 구버전이면 은퇴 스냅샷으로 풀려 404.
+        // 전체 ID 를 주면 CLI 가 그대로 API 로 넘겨 서버가 해석한다.
+        p.arguments = ["--model", "claude-sonnet-4-6", "-p", arg]
         // 격리 cwd — claude 가 다운로드/데스크탑/음악 등 일반 폴더를 훑지 않게 (Pacer TCC 권한 팝업 방지)
         let workDir = NSHomeDirectory() + "/.config/claude-pacer"
         try? FileManager.default.createDirectory(atPath: workDir, withIntermediateDirectories: true)

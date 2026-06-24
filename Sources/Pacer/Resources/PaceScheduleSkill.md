@@ -90,7 +90,7 @@ auth 는 in-process — curl 쓰지 말 것.
   "job_config": {
     "ccr": {
       "environment_id": "<env>",
-      "session_context": { "model": "claude-haiku-4-5", "allowed_tools": [] },
+      "session_context": { "model": "claude-haiku-4-5-20251001", "allowed_tools": [] },
       "events": [
         { "data": {
             "uuid": "<생성한 uuid>",
