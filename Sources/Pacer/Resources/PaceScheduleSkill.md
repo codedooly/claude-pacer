@@ -66,6 +66,7 @@ auth 는 in-process — curl 쓰지 말 것.
 - `<tid>` 있으면 → `{action:"update", trigger_id:"<tid>", body:{cron_expression:"<cron>", enabled:true, job_config:<아래 ccr>}}`
 - 없으면 → `{action:"create", body:<아래 create 템플릿>}`
 > **중요**: register 는 **항상 `enabled: true` 로 update** 한다. cron 이 이미 같더라도 routine 이 비활성(disabled) 상태였을 수 있으므로 반드시 다시 활성화한다. "이미 일치하니 변경 없음" 으로 건너뛰지 말 것.
+> **진실 소스는 오직 RemoteTrigger 응답이다.** 작업 디렉토리의 로컬 파일(`config.json` 등)을 읽지 말 것 — 로컬 파일을 보고 "이미 설정됨/변경 불필요"로 판단하지 마라. register 는 무조건 RemoteTrigger create/update 를 호출한다.
 
 ### disable
 - `<tid>` 있으면 → `{action:"update", trigger_id:"<tid>", body:{enabled:false}}`

@@ -30,8 +30,9 @@ enum RoutineService {
         // 현재 모델 ID 직접 지정 — CLI 의 sonnet/haiku 단축 alias 는 구버전이면 은퇴 스냅샷으로 풀려 404.
         // 전체 ID 를 주면 CLI 가 그대로 API 로 넘겨 서버가 해석한다.
         p.arguments = ["--model", "claude-sonnet-4-6", "-p", arg]
-        // 격리 cwd — claude 가 다운로드/데스크탑/음악 등 일반 폴더를 훑지 않게 (Pacer TCC 권한 팝업 방지)
-        let workDir = NSHomeDirectory() + "/.config/claude-pacer"
+        // 빈 전용 cwd — config.json 등 로컬 파일을 모델이 읽고 '이미 설정됨'으로 오판하는 것 방지 (+ TCC 팝업 방지)
+        let workDir = NSHomeDirectory() + "/.config/claude-pacer/.skillrun"
+        try? FileManager.default.removeItem(atPath: workDir)
         try? FileManager.default.createDirectory(atPath: workDir, withIntermediateDirectories: true)
         p.currentDirectoryURL = URL(fileURLWithPath: workDir)
         let out = Pipe()
