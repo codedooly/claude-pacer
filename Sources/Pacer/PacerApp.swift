@@ -102,11 +102,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func menuRefresh() { Task { await model.refresh(force: true) } }
     @objc private func menuSettings() { openSettings() }
     @objc private func menuUpdate() {
-        // 최신 버전 fetch → 현재→최신 화살표 확인 팝업 → 업데이트
-        Updater.fetchLatest { [weak self] latest in
-            guard self != nil else { return }
-            Updater.runUpdate(latest: latest)
-        }
+        // 최신 확인 거침 — 같으면 "최신입니다", 새 버전이면 현재→최신 화살표 확인 (About 과 동일 흐름)
+        checkForUpdates()
     }
     @objc private func menuQuit() { NSApp.terminate(nil) }
 
