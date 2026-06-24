@@ -26,7 +26,8 @@ enum RoutineService {
 
         let p = Process()
         p.executableURL = URL(fileURLWithPath: PingRunner.claudePath())
-        p.arguments = ["-p", arg]
+        // 모델 명시 — 사용자 CLI 기본 모델이 은퇴 스냅샷이면 404 나므로 alias 로 고정 (은퇴 안 됨)
+        p.arguments = ["--model", "sonnet", "-p", arg]
         // 격리 cwd — claude 가 다운로드/데스크탑/음악 등 일반 폴더를 훑지 않게 (Pacer TCC 권한 팝업 방지)
         let workDir = NSHomeDirectory() + "/.config/claude-pacer"
         try? FileManager.default.createDirectory(atPath: workDir, withIntermediateDirectories: true)
