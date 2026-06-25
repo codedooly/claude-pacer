@@ -106,11 +106,14 @@ enum RoutineService {
         let p = Process()
         let claudePath = PingRunner.claudePath()
         p.executableURL = URL(fileURLWithPath: claudePath)
-        // 현재 모델 ID 직접 지정 — CLI 의 sonnet/haiku 단축 alias 는 구버전이면 은퇴 스냅샷으로 풀려 404.
-        // 전체 ID 를 주면 CLI 가 그대로 API 로 넘겨 서버가 해석한다.
-        // --strict-mcp-config: 사용자 MCP(Gmail·Notion 등) 전부 무시 — RemoteTrigger 는 claude.ai 빌트인이라 생존.
-        // .app 컨텍스트에서 사용자 MCP 로딩 실패가 RemoteTrigger 로딩까지 막던 문제(jisu)를 회피한다.
-        p.arguments = ["--model", "claude-sonnet-4-6", "--strict-mcp-config", "-p", prompt]
+        // claude 호출을 최대한 격리 — auth(Keychain)·빌트인 RemoteTrigger 만 남기고 사용자 환경을 배제.
+        // 모델 ID 직접: CLI 단축 alias 의 404 회피.
+        // --strict-mcp-config: 사용자 MCP(Gmail·Notion 등) 무시 — .app 에서 MCP 로딩 실패가 RemoteTrigger 를 막던 문제(jisu).
+        // --setting-sources project: 사용자 플러그인·훅 제외 — bell 의 claude-mem SessionEnd 훅이 세션을 망치던 문제.
+        // (RemoteTrigger·auth 는 둘 다 위 격리에도 생존 확인됨)
+        p.arguments = ["--model", "claude-sonnet-4-6",
+                       "--strict-mcp-config", "--setting-sources", "project",
+                       "-p", prompt]
         // 빈 전용 cwd — config.json 등 로컬 파일을 모델이 읽고 '이미 설정됨'으로 오판하는 것 방지 (+ TCC 팝업 방지)
         let workDir = NSHomeDirectory() + "/.config/claude-pacer/.skillrun"
         try? FileManager.default.removeItem(atPath: workDir)
@@ -161,14 +164,27 @@ enum RoutineService {
         // stdout + stderr 합쳐 읽기 — 실패 시 실제 에러(404 등)를 사용자에게 노출하기 위함
         let outData = out.fileHandleForReading.readDataToEndOfFile()
         let errData = err.fileHandleForReading.readDataToEndOfFile()
-        let combined = (String(data: outData, encoding: .utf8) ?? "")
+        let raw = (String(data: outData, encoding: .utf8) ?? "")
             + (String(data: errData, encoding: .utf8) ?? "")
+        // PTY 출력의 \r·ANSI 이스케이프 제거 (script 가 터미널 제어문자를 섞음) → PACE_RESULT 파싱 안정화
+        let combined = sanitizePTY(raw)
 
         // 진단 로그 적재 — GUI(.app) 실행 컨텍스트의 실제 입출력·환경 추적
         appendDebugLog(label: label, claudePath: claudePath, pathValue: pathValue,
                        env: env, started: started, exitStatus: p.terminationStatus,
                        timedOut: timedOut, output: combined)
         return combined
+    }
+
+    /// PTY(script) 출력 정리 — 캐리지리턴·ANSI/OSC 이스케이프 시퀀스 제거.
+    static func sanitizePTY(_ s: String) -> String {
+        s.replacingOccurrences(of: "\r", with: "")
+            // CSI: ESC [ ... 종결문자
+            .replacingOccurrences(of: "\u{1B}\\[[0-9;?=]*[ -/]*[@-~]", with: "", options: .regularExpression)
+            // OSC: ESC ] ... BEL
+            .replacingOccurrences(of: "\u{1B}\\][0-9;]*[^\u{07}]*\u{07}", with: "", options: .regularExpression)
+            // 기타 단문 이스케이프 (ESC ( B, ESC =, ESC > 등)
+            .replacingOccurrences(of: "\u{1B}[()][AB0]|\u{1B}[>=78]", with: "", options: .regularExpression)
     }
 
     /// 루틴 실행 진단 로그 — Pacer 의 `claude -p` 호출 입출력·환경을 파일로 남긴다.
@@ -226,7 +242,7 @@ enum RoutineService {
         for line in output.split(separator: "\n") where line.contains("PACE_RESULT") {
             let json = line
                 .replacingOccurrences(of: "PACE_RESULT", with: "")
-                .trimmingCharacters(in: .whitespaces)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
             guard
                 let d = json.data(using: .utf8),
                 let obj = try? JSONSerialization.jsonObject(with: d) as? [String: Any]
