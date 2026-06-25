@@ -30,45 +30,48 @@ enum Updater {
         let current = currentVersion()
 
         // 확인창 — Update 가 아니면 중단
-        let alert = NSAlert()
-        alert.messageText = "Pacer 업데이트"
         // 최신을 알면 현재→최신 화살표, 모르면(네트워크 실패) 기존 일반 문구
+        let message: String
         if let latest {
-            alert.informativeText = tr(lang,
+            message = tr(lang,
                 "Current  \(current)  →  Latest  \(latest)\n\nDownload and restart?",
                 "현재  \(current)  →  최신  \(latest)\n\n받아서 재시작합니다. 계속할까요?")
         } else {
-            alert.informativeText = tr(lang,
+            message = tr(lang,
                 "Download the latest version and restart?",
                 "최신 버전을 받아 재시작합니다. 계속할까요?")
         }
-        alert.addButton(withTitle: tr(lang, "Update", "업데이트"))
-        alert.addButton(withTitle: tr(lang, "Cancel", "취소"))
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        // 확인창 — "업데이트"(인덱스 1) 일 때만 진행
+        PacerDialog.show(title: tr(lang, "Update Pacer", "Pacer 업데이트"),
+                         message: message,
+                         buttons: [(tr(lang, "Cancel", "취소"), false),
+                                   (tr(lang, "Update", "업데이트"), true)]) { idx in
+            guard idx == 1 else { return }
 
-        // 교체 스크립트 작성 — Pacer 종료 대기 후 dmg 받아 /Applications 교체·재실행
-        let script = """
-        #!/bin/bash
-        while pgrep -x Pacer >/dev/null 2>&1; do sleep 0.4; done
-        DL=$(mktemp -d); MNT=$(mktemp -d)
-        curl -fsSL https://github.com/codedooly/claude-pacer/releases/latest/download/Pacer.dmg -o "$DL/Pacer.dmg" || exit 1
-        hdiutil attach -nobrowse -quiet -mountpoint "$MNT" "$DL/Pacer.dmg" || exit 1
-        rm -rf /Applications/Pacer.app
-        cp -R "$MNT/Pacer.app" /Applications/
-        hdiutil detach -quiet "$MNT"
-        rm -rf "$DL" "$MNT"
-        open -a Pacer
-        """
-        let path = NSTemporaryDirectory() + "pacer-update.sh"
-        guard (try? script.write(toFile: path, atomically: true, encoding: .utf8)) != nil else { return }
+            // 교체 스크립트 작성 — Pacer 종료 대기 후 dmg 받아 /Applications 교체·재실행
+            let script = """
+            #!/bin/bash
+            while pgrep -x Pacer >/dev/null 2>&1; do sleep 0.4; done
+            DL=$(mktemp -d); MNT=$(mktemp -d)
+            curl -fsSL https://github.com/codedooly/claude-pacer/releases/latest/download/Pacer.dmg -o "$DL/Pacer.dmg" || exit 1
+            hdiutil attach -nobrowse -quiet -mountpoint "$MNT" "$DL/Pacer.dmg" || exit 1
+            rm -rf /Applications/Pacer.app
+            cp -R "$MNT/Pacer.app" /Applications/
+            hdiutil detach -quiet "$MNT"
+            rm -rf "$DL" "$MNT"
+            open -a Pacer
+            """
+            let path = NSTemporaryDirectory() + "pacer-update.sh"
+            guard (try? script.write(toFile: path, atomically: true, encoding: .utf8)) != nil else { return }
 
-        // detached 실행 — 앱이 곧 종료되므로 waitUntilExit 하지 않는다 (chmod 불필요: bash <path>)
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/bin/bash")
-        p.arguments = [path]
-        try? p.run()
+            // detached 실행 — 앱이 곧 종료되므로 waitUntilExit 하지 않는다 (chmod 불필요: bash <path>)
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/bin/bash")
+            p.arguments = [path]
+            try? p.run()
 
-        // 앱 종료 → 스크립트의 pgrep 대기가 풀려 교체 시작
-        NSApp.terminate(nil)
+            // 앱 종료 → 스크립트의 pgrep 대기가 풀려 교체 시작
+            NSApp.terminate(nil)
+        }
     }
 }

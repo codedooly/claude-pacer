@@ -13,3 +13,4 @@ assets/raw/
 
 # dmg 산출물
 *.dmg
+build-debug/

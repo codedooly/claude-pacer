@@ -35,17 +35,15 @@ struct AboutView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            // 업데이트 확인 — 프라이머리
+            // 업데이트 확인 — 프라이머리(보라)
             Button(tr(lang, "Check for updates", "업데이트 확인")) { onCheckUpdate() }
-                .buttonStyle(.borderedProminent)
-                .tint(.pacerPurple)
-                .frame(maxWidth: .infinity)
+                .buttonStyle(PacerButtonStyle(primary: true))
 
             HStack(spacing: 8) {
                 Button("GitHub") { onGitHub() }
-                    .frame(maxWidth: .infinity)
+                    .buttonStyle(PacerButtonStyle(primary: false))
                 Button(tr(lang, "Close", "닫기")) { onClose() }
-                    .frame(maxWidth: .infinity)
+                    .buttonStyle(PacerButtonStyle(primary: false))
             }
         }
         .padding()
