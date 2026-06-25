@@ -38,7 +38,7 @@ Pacer runs on top of the **Claude Code CLI** — end users installing the app **
 
 | | What you need |
 |------|----------|
-| **Run** (install dmg) | macOS 14+ · [Claude Code](https://claude.com/claude-code) installed & logged in · Claude Pro / Max subscription |
+| **Run** (install dmg) | macOS 14+ · [Claude Code](https://claude.com/claude-code) installed & logged in (runs on **Node.js**) · Claude Pro / Max subscription |
 | **Build** (from source) | the above + full Xcode · `xcodegen` · `create-dmg` (Homebrew) |
 
 > Claude Code handles the usage token (Keychain), ping firing, and Cloud routine registration, so it's required. Without a token the app shows the onboarding screen. (Claude Code itself runs on Node.js.)

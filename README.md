@@ -38,7 +38,7 @@ Pacer 는 **Claude Code CLI** 위에서 동작합니다 — 설치해 쓰는 사
 
 | 구분 | 필요한 것 |
 |------|----------|
-| **실행** (dmg 설치) | macOS 14+ · [Claude Code](https://claude.com/claude-code) 설치·로그인 · Claude Pro / Max 구독 |
+| **실행** (dmg 설치) | macOS 14+ · [Claude Code](https://claude.com/claude-code) 설치·로그인 (**Node.js** 위에서 동작) · Claude Pro / Max 구독 |
 | **빌드** (소스에서) | 위 + 정식 Xcode · `xcodegen` · `create-dmg` (Homebrew) |
 
 > Claude Code 가 사용량 토큰(Keychain)·핑 발사·Cloud routine 등록을 담당하므로 **필수**입니다. 토큰이 없으면 앱이 온보딩 화면을 띄웁니다. (Claude Code 자체는 Node.js 기반)

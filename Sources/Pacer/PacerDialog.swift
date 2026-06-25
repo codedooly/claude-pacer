@@ -17,6 +17,7 @@ enum PacerDialog {
         window.appearance = NSAppearance(named: .darkAqua)
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
+        window.level = .floating   // 설정 창 등 일반 윈도우 위에 뜨도록 (뒤로 숨던 버그 수정)
         var done = false
         let finish: (Int) -> Void = { idx in
             guard !done else { return }; done = true
