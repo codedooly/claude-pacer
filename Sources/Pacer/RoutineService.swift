@@ -62,129 +62,30 @@ enum RoutineService {
         return String(combined[range])
     }
 
-    /// 로그인 셸 env 캐시 — GUI(.app)의 launchd 최소 env 를 터미널과 동일하게 보강 (1회 캡처 후 재사용).
-    static let loginShellEnv: [String: String]? = captureLoginShellEnv()
-
-    /// `$SHELL -ilc 'env -0'` 로 로그인+인터랙티브 셸 env(.zprofile·.zshrc 의 nvm·PATH 포함)를 캡처.
-    /// @returns env 딕셔너리 (실패·타임아웃 시 nil → 호출부가 ProcessInfo env 로 폴백)
-    private static func captureLoginShellEnv() -> [String: String]? {
-        let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: shell)
-        // -i(interactive)+l(login): .zprofile + .zshrc 까지 소싱해야 nvm 등 PATH 확보. env -0: NUL 구분(값에 개행 안전)
-        p.arguments = ["-ilc", "/usr/bin/env -0"]
-        let out = Pipe()
-        p.standardOutput = out
-        p.standardError = Pipe()
-
-        // 인터랙티브 셸 행(p10k 등) 방지 — 세마포어 5초 타임아웃
-        let sem = DispatchSemaphore(value: 0)
-        p.terminationHandler = { _ in sem.signal() }
-        do { try p.run() } catch { return nil }
-        if sem.wait(timeout: .now() + 5) == .timedOut {
-            if p.isRunning { p.terminate() }
-            return nil
-        }
-        guard p.terminationStatus == 0 else { return nil }
-
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        guard let str = String(data: data, encoding: .utf8) else { return nil }
-        // NUL 구분 KEY=VALUE 파싱
-        var dict: [String: String] = [:]
-        for pair in str.split(separator: "\0") {
-            guard let eq = pair.firstIndex(of: "=") else { continue }
-            dict[String(pair[..<eq])] = String(pair[pair.index(after: eq)...])
-        }
-        return dict.isEmpty ? nil : dict
-    }
-
-    /// claude -p 실행 공통 보일러플레이트 — 모델·cwd·PATH·60초 timeout·더블 resume 가드.
+    /// claude -p 실행 — 격리 플래그·빈 cwd·env 보강·타임아웃을 ClaudeCLI.run 으로 처리하고 진단 로그를 남긴다.
     /// @param prompt 전달할 프롬프트
     /// @param label  진단 로그용 호출 식별자 (예: "run register ...", "fetchEnvId")
     /// @returns stdout + stderr 합친 출력
     private static func runClaude(prompt: String, label: String) async -> String {
-        let p = Process()
         let claudePath = PingRunner.claudePath()
-        p.executableURL = URL(fileURLWithPath: claudePath)
-        // claude 호출을 최대한 격리 — auth(Keychain)·빌트인 RemoteTrigger 만 남기고 사용자 환경을 배제.
-        // 모델 ID 직접: CLI 단축 alias 의 404 회피.
-        // --strict-mcp-config: 사용자 MCP(Gmail·Notion 등) 무시 — .app 에서 MCP 로딩 실패가 RemoteTrigger 를 막던 문제(jisu).
-        // --setting-sources project: 사용자 플러그인·훅 제외 — bell 의 claude-mem SessionEnd 훅이 세션을 망치던 문제.
-        // (RemoteTrigger·auth 는 둘 다 위 격리에도 생존 확인됨)
-        p.arguments = ["--model", "claude-sonnet-4-6",
-                       "--strict-mcp-config", "--setting-sources", "project",
-                       "-p", prompt]
+        // 격리: --model(404 회피, 전체 ID 직접) + --setting-sources project(사용자 플러그인·훅·MCP 제외 —
+        // bell 의 claude-mem 훅·사용자 MCP 가 한꺼번에 빠짐. RemoteTrigger·auth 는 빌트인이라 생존)
+        let args = ["--model", "claude-sonnet-4-6", "--setting-sources", "project", "-p", prompt]
         // 빈 전용 cwd — config.json 등 로컬 파일을 모델이 읽고 '이미 설정됨'으로 오판하는 것 방지 (+ TCC 팝업 방지)
         let workDir = NSHomeDirectory() + "/.config/claude-pacer/.skillrun"
         try? FileManager.default.removeItem(atPath: workDir)
         try? FileManager.default.createDirectory(atPath: workDir, withIntermediateDirectories: true)
-        p.currentDirectoryURL = URL(fileURLWithPath: workDir)
-        let out = Pipe()
-        let err = Pipe()
-        p.standardOutput = out
-        p.standardError = err
-        // 로그인 셸 env 흡수 — GUI(.app)는 launchd 최소 env 라 node(nvm)·PATH 가 빈약해 claude 하위 도구·훅이 깨진다(bell).
-        var env = loginShellEnv ?? ProcessInfo.processInfo.environment
-        let claudeDir = (claudePath as NSString).deletingLastPathComponent
-        // claudeDir 를 PATH 앞에 보장 (셸 PATH 에 이미 있으면 그대로)
-        let shellPath = env["PATH"] ?? "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-        let pathValue = shellPath.contains(claudeDir) ? shellPath : "\(claudeDir):\(shellPath)"
-        env["PATH"] = pathValue
-        p.environment = env
 
+        let env = ClaudeCLI.env(for: claudePath)
         let started = Date()
-        var timedOut = false   // 타임아웃으로 강제 종료됐는지 (진단 로그용)
-
-        // 종료까지 비동기 대기 (claude 세션이 수 초~분 걸림)
-        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
-            // continuation 더블 resume 방지 가드 (terminationHandler vs timeout 경쟁)
-            let lock = NSLock()
-            var resumed = false
-            func resumeOnce() {
-                lock.lock(); defer { lock.unlock() }
-                guard !resumed else { return }
-                resumed = true
-                c.resume()
-            }
-
-            // terminationHandler 를 run() 이전에 설정 — 즉시 종료를 놓치지 않게
-            p.terminationHandler = { _ in resumeOnce() }
-
-            do { try p.run() } catch { resumeOnce(); return }
-
-            // 타임아웃 60초 — 네트워크·claude 문제로 무한 대기 방지
-            Task {
-                try? await Task.sleep(for: .seconds(60))
-                if p.isRunning { timedOut = true; p.terminate() }
-                // terminate 후에도 핸들러가 안 불릴 수 있으니 직접 가드 거쳐 resume
-                resumeOnce()
-            }
-        }
-
-        // stdout + stderr 합쳐 읽기 — 실패 시 실제 에러(404 등)를 사용자에게 노출하기 위함
-        let outData = out.fileHandleForReading.readDataToEndOfFile()
-        let errData = err.fileHandleForReading.readDataToEndOfFile()
-        let raw = (String(data: outData, encoding: .utf8) ?? "")
-            + (String(data: errData, encoding: .utf8) ?? "")
-        // PTY 출력의 \r·ANSI 이스케이프 제거 (script 가 터미널 제어문자를 섞음) → PACE_RESULT 파싱 안정화
-        let combined = sanitizePTY(raw)
+        let r = await ClaudeCLI.run(executable: claudePath, args: args, env: env,
+                                    cwd: URL(fileURLWithPath: workDir), timeout: 60)
 
         // 진단 로그 적재 — GUI(.app) 실행 컨텍스트의 실제 입출력·환경 추적
-        appendDebugLog(label: label, claudePath: claudePath, pathValue: pathValue,
-                       env: env, started: started, exitStatus: p.terminationStatus,
-                       timedOut: timedOut, output: combined)
-        return combined
-    }
-
-    /// PTY(script) 출력 정리 — 캐리지리턴·ANSI/OSC 이스케이프 시퀀스 제거.
-    static func sanitizePTY(_ s: String) -> String {
-        s.replacingOccurrences(of: "\r", with: "")
-            // CSI: ESC [ ... 종결문자
-            .replacingOccurrences(of: "\u{1B}\\[[0-9;?=]*[ -/]*[@-~]", with: "", options: .regularExpression)
-            // OSC: ESC ] ... BEL
-            .replacingOccurrences(of: "\u{1B}\\][0-9;]*[^\u{07}]*\u{07}", with: "", options: .regularExpression)
-            // 기타 단문 이스케이프 (ESC ( B, ESC =, ESC > 등)
-            .replacingOccurrences(of: "\u{1B}[()][AB0]|\u{1B}[>=78]", with: "", options: .regularExpression)
+        appendDebugLog(label: label, claudePath: claudePath, pathValue: env["PATH"] ?? "",
+                       env: env, started: started, exitStatus: r.status,
+                       timedOut: r.timedOut, output: r.output)
+        return r.output
     }
 
     /// 루틴 실행 진단 로그 — Pacer 의 `claude -p` 호출 입출력·환경을 파일로 남긴다.

@@ -47,7 +47,7 @@ enum PingRunner {
     /// (구/신버전이 혼재할 때 PATH 우선순위 = 터미널과 동일 → 신버전 standalone 선택, 구버전 homebrew 회피)
     static func claudePath() -> String {
         // 로그인 셸 PATH 순서대로 탐색 (없으면 현재 프로세스 env PATH)
-        let shellPath = RoutineService.loginShellEnv?["PATH"] ?? ProcessInfo.processInfo.environment["PATH"] ?? ""
+        let shellPath = ClaudeCLI.loginShellEnv?["PATH"] ?? ProcessInfo.processInfo.environment["PATH"] ?? ""
         for dir in shellPath.split(separator: ":") {
             let c = String(dir) + "/claude"
             if FileManager.default.isExecutableFile(atPath: c) { return c }
