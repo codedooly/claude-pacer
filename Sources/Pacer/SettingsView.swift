@@ -11,7 +11,7 @@ struct SettingsView: View {
     @State private var window: NSWindow?
     @State private var routineLoading = false
     @State private var syncing = false        // Done 시 routine 동기화 카운트다운
-    @State private var syncCountdown = 15
+    @State private var syncCountdown = 20
     @State private var syncError: String?     // Cloud 등록 실패 안내 (예: no_env). 성공 시 nil 로 클리어
     @State private var lastNextRunAt: Date?   // 마지막 register 성공 결과의 next_run_at (성공 팝업 안내용)
     @AppStorage("pacerLang") private var lang = "en"
@@ -311,10 +311,10 @@ struct SettingsView: View {
     private func startSyncAndClose() {
         Task { @MainActor in
             syncing = true
-            syncCountdown = 15
-            // 15초 카운트다운 — 0 이 되면 스피너로 전환 (그 이상 걸리는 경우)
+            syncCountdown = 20
+            // 20초 카운트다운 — 0 이 되면 스피너로 전환 (2단계 등록 등 그 이상 걸리는 경우)
             let counter = Task { @MainActor in
-                for i in stride(from: 15, through: 1, by: -1) {
+                for i in stride(from: 20, through: 1, by: -1) {
                     syncCountdown = i
                     try? await Task.sleep(for: .seconds(1))
                 }
@@ -333,11 +333,10 @@ struct SettingsView: View {
     /// 적용 성공 팝업 — 모드별 발화 안내. [확인] 시 창 닫기.
     private func showAppliedAlert() {
         let times = currentCSV.replacingOccurrences(of: ",", with: " · ")
-        let alert = NSAlert()
-        alert.messageText = tr(lang, "Applied", "적용 완료")
+        // 모드별 안내 문구 구성
+        let info: String
         if mode == "cloud" {
             // next_run_at 있으면 KST 로 안내에 포함
-            var info: String
             if let next = lastNextRunAt {
                 let df = DateFormatter()
                 df.dateFormat = "yyyy-MM-dd HH:mm"
@@ -351,15 +350,14 @@ struct SettingsView: View {
                           "Cloud routine registered — pings fire daily at \(times).",
                           "Cloud routine 등록 완료 — 매일 \(times) 발화.")
             }
-            alert.informativeText = info
         } else {
-            alert.informativeText = tr(lang,
+            info = tr(lang,
                 "Local pings registered — fire daily at \(times) (your Mac must be on).",
                 "Local 핑 등록 완료 — 매일 \(times) 발화 (맥이 켜져 있어야 함).")
         }
-        alert.addButton(withTitle: tr(lang, "OK", "확인"))
-        alert.runModal()
-        window?.performClose(nil)
+        PacerDialog.show(title: tr(lang, "Applied", "적용 완료"),
+                         message: info,
+                         buttons: [(tr(lang, "OK", "확인"), true)]) { _ in window?.performClose(nil) }
     }
 
     /// 모드 전환 시 routine 동기화 — Cloud 면 등록/활성, Local 이면 비활성화. 성공해야 config 확정.
@@ -424,11 +422,13 @@ struct SettingsView: View {
                 "No cloud environment found. Create one at claude.ai/code, then retry — or paste your env_… below.",
                 "클라우드 환경이 없습니다. claude.ai/code 에서 환경을 만든 뒤 다시 시도하거나, /schedule 의 env_… 를 아래에 붙여넣으세요.")
         } else {
-            // 그 외 실패 → 실제 에러(404 등)를 NSAlert 로 노출해 사용자가 접수 가능하게
-            let alert = NSAlert()
-            alert.messageText = tr(lang, "Cloud registration failed", "Cloud 등록 실패")
-            alert.informativeText = r?.errorDetail ?? syncError ?? "unknown"
-            alert.runModal()
+            // 그 외 실패 → 실제 에러(404 등)를 Pacer 다이얼로그로 노출해 사용자가 접수 가능하게
+            let detail = r?.errorDetail ?? syncError ?? "unknown"
+            await MainActor.run {
+                PacerDialog.show(title: tr(lang, "Cloud registration failed", "Cloud 등록 실패"),
+                                 message: detail,
+                                 buttons: [("OK", true)])
+            }
         }
         routineLoading = false
         return ok

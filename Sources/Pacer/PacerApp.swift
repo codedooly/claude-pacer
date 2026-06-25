@@ -92,6 +92,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Update·Help 는 로그인 여부와 무관하게 항상 활성
         menu.addItem(withTitle: tr(lang, "Update…", "업데이트…"), action: #selector(menuUpdate), keyEquivalent: "")
         menu.addItem(withTitle: tr(lang, "Help", "도움말"), action: #selector(menuHelp), keyEquivalent: "")
+        // Cloud 루틴 진단 로그를 Finder 에서 노출 (지원·디버깅용)
+        menu.addItem(withTitle: tr(lang, "Open Routine Log", "루틴 로그 열기"), action: #selector(openRoutineLog), keyEquivalent: "")
+        #if PACER_DEBUG
+        // 디버그 전용 — 팝업 체크 전용 창을 띄워 디자인·언어 토글 확인 (릴리즈 빌드엔 미포함)
+        menu.addItem(.separator())
+        let dbgItem = menu.addItem(withTitle: "🧪 팝업 체크", action: #selector(openDebugPopups), keyEquivalent: "")
+        dbgItem.target = self
+        #endif
         menu.addItem(.separator())
         menu.addItem(withTitle: tr(lang, "Quit Pacer", "Pacer 종료"), action: #selector(menuQuit), keyEquivalent: "")
         for item in menu.items { item.target = self }
@@ -107,6 +115,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         checkForUpdates()
     }
     @objc private func menuQuit() { NSApp.terminate(nil) }
+
+    /// 루틴 진단 로그를 Finder 에서 선택 노출 — 없으면 폴더만 연다.
+    @objc private func openRoutineLog() {
+        let dir = NSHomeDirectory() + "/.config/claude-pacer"
+        let log = dir + "/routine-debug.log"
+        if FileManager.default.fileExists(atPath: log) {
+            NSWorkspace.shared.selectFile(log, inFileViewerRootedAtPath: "")
+        } else {
+            NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: dir)
+        }
+    }
+
+    #if PACER_DEBUG
+    // 디버그 전용 — 팝업 체크 전용 창 (언어 토글 + 더미 다이얼로그, 릴리즈 빌드엔 미포함)
+    private var debugWindow: NSWindow?
+
+    /// 팝업 체크 창 — 다크 톤 작은 NSWindow 에 DebugPopupView 호스팅 (openPingLog 패턴).
+    @objc func openDebugPopups() {
+        if debugWindow == nil {
+            let w = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 280, height: 320),
+                styleMask: [.titled, .closable],
+                backing: .buffered, defer: false
+            )
+            w.title = "팝업 체크"
+            w.appearance = NSAppearance(named: .darkAqua)
+            w.contentViewController = NSHostingController(
+                rootView: DebugPopupView(onAbout: { [weak self] in self?.menuHelp() })
+            )
+            w.center()
+            w.isReleasedWhenClosed = false
+            w.collectionBehavior = [.moveToActiveSpace]
+            debugWindow = w
+        }
+        popover.performClose(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        debugWindow?.makeKeyAndOrderFront(nil)
+    }
+    #endif
 
     /// 현재 앱 버전 (CFBundleShortVersionString).
     private func appVersion() -> String {
@@ -159,16 +206,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// checkForUpdates 결과를 NSAlert 로 표시 (메인스레드).
+    /// checkForUpdates 결과를 Pacer 다이얼로그로 표시 (메인스레드).
     @MainActor private func presentUpdateResult(latest: String?, current: String, lang: String) {
         // 네트워크/파싱 실패
         guard let latest, !latest.isEmpty else {
-            let a = NSAlert()
-            a.messageText = "Pacer"
-            a.informativeText = tr(lang,
-                "Couldn't check for updates — check your connection.",
-                "업데이트 확인 실패 — 인터넷 연결을 확인하세요.")
-            a.runModal()
+            PacerDialog.show(title: "Pacer",
+                message: tr(lang,
+                    "Couldn't check for updates — check your connection.",
+                    "업데이트 확인 실패 — 인터넷 연결을 확인하세요."),
+                buttons: [("OK", true)])
             return
         }
         // semver 비교 (major.minor.patch 숫자)
@@ -176,12 +222,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // 새 버전 → 화살표 확인 팝업 하나만 (이중 팝업 금지)
             Updater.runUpdate(latest: latest)
         } else {
-            let a = NSAlert()
-            a.messageText = "Pacer"
-            a.informativeText = tr(lang,
-                "You're on the latest version (\(current)).",
-                "최신 버전입니다 (\(current)).")
-            a.runModal()
+            PacerDialog.show(title: "Pacer",
+                message: tr(lang,
+                    "You're on the latest version (\(current)).",
+                    "최신 버전입니다 (\(current))."),
+                buttons: [(tr(lang, "OK", "확인"), true)])
         }
     }
 

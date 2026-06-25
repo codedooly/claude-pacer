@@ -40,7 +40,7 @@ enum RoutineService {
         """
 
         // claude -p 실행 → stdout+stderr 합친 출력 획득 (run()/fetchEnvId() 공유 보일러플레이트)
-        let combined = await runClaude(prompt: prompt)
+        let combined = await runClaude(prompt: prompt, label: "run \(argLine)")
         // 합친 출력의 마지막 ~600자 (PACE_RESULT 미발견·reason 없는 실패 시 errorDetail 로 전달)
         let rawTail = String(combined.suffix(600)).trimmingCharacters(in: .whitespacesAndNewlines)
         return parse(combined, rawTail: rawTail)
@@ -53,7 +53,7 @@ enum RoutineService {
         let prompt = "/schedule 로 Available environments 만 조회. routine 생성·변경·실행 금지. 마지막 줄에 정확히 ENV_ID=<env_xxx 또는 NONE> 만 출력."
 
         // run() 과 동일 방식으로 실행 (같은 셋업·timeout·가드 재사용)
-        let combined = await runClaude(prompt: prompt)
+        let combined = await runClaude(prompt: prompt, label: "fetchEnvId")
 
         // ENV_ID=NONE 명시면 환경 없음
         if combined.contains("ENV_ID=NONE") { return nil }
@@ -64,10 +64,12 @@ enum RoutineService {
 
     /// claude -p 실행 공통 보일러플레이트 — 모델·cwd·PATH·60초 timeout·더블 resume 가드.
     /// @param prompt 전달할 프롬프트
+    /// @param label  진단 로그용 호출 식별자 (예: "run register ...", "fetchEnvId")
     /// @returns stdout + stderr 합친 출력
-    private static func runClaude(prompt: String) async -> String {
+    private static func runClaude(prompt: String, label: String) async -> String {
         let p = Process()
-        p.executableURL = URL(fileURLWithPath: PingRunner.claudePath())
+        let claudePath = PingRunner.claudePath()
+        p.executableURL = URL(fileURLWithPath: claudePath)
         // 현재 모델 ID 직접 지정 — CLI 의 sonnet/haiku 단축 alias 는 구버전이면 은퇴 스냅샷으로 풀려 404.
         // 전체 ID 를 주면 CLI 가 그대로 API 로 넘겨 서버가 해석한다.
         p.arguments = ["--model", "claude-sonnet-4-6", "-p", prompt]
@@ -82,9 +84,13 @@ enum RoutineService {
         p.standardError = err
         // claude 가 하위 도구를 찾도록 PATH 보강
         var env = ProcessInfo.processInfo.environment
-        let claudeDir = (PingRunner.claudePath() as NSString).deletingLastPathComponent
-        env["PATH"] = "\(claudeDir):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+        let claudeDir = (claudePath as NSString).deletingLastPathComponent
+        let pathValue = "\(claudeDir):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+        env["PATH"] = pathValue
         p.environment = env
+
+        let started = Date()
+        var timedOut = false   // 타임아웃으로 강제 종료됐는지 (진단 로그용)
 
         // 종료까지 비동기 대기 (claude 세션이 수 초~분 걸림)
         await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
@@ -106,7 +112,7 @@ enum RoutineService {
             // 타임아웃 60초 — 네트워크·claude 문제로 무한 대기 방지
             Task {
                 try? await Task.sleep(for: .seconds(60))
-                if p.isRunning { p.terminate() }
+                if p.isRunning { timedOut = true; p.terminate() }
                 // terminate 후에도 핸들러가 안 불릴 수 있으니 직접 가드 거쳐 resume
                 resumeOnce()
             }
@@ -115,8 +121,64 @@ enum RoutineService {
         // stdout + stderr 합쳐 읽기 — 실패 시 실제 에러(404 등)를 사용자에게 노출하기 위함
         let outData = out.fileHandleForReading.readDataToEndOfFile()
         let errData = err.fileHandleForReading.readDataToEndOfFile()
-        return (String(data: outData, encoding: .utf8) ?? "")
+        let combined = (String(data: outData, encoding: .utf8) ?? "")
             + (String(data: errData, encoding: .utf8) ?? "")
+
+        // 진단 로그 적재 — GUI(.app) 실행 컨텍스트의 실제 입출력·환경 추적
+        appendDebugLog(label: label, claudePath: claudePath, pathValue: pathValue,
+                       env: env, started: started, exitStatus: p.terminationStatus,
+                       timedOut: timedOut, output: combined)
+        return combined
+    }
+
+    /// 루틴 실행 진단 로그 — Pacer 의 `claude -p` 호출 입출력·환경을 파일로 남긴다.
+    /// GUI(.app)는 launchd 최소 env 로 실행돼 터미널과 달라질 수 있어, 그 차이를 추적하기 위함.
+    /// 저장 위치: `~/.config/claude-pacer/routine-debug.log` (메뉴 "루틴 로그 열기"로 노출).
+    private static func appendDebugLog(label: String, claudePath: String, pathValue: String,
+                                       env: [String: String], started: Date, exitStatus: Int32,
+                                       timedOut: Bool, output: String) {
+        let dir = NSHomeDirectory() + "/.config/claude-pacer"
+        let path = dir + "/routine-debug.log"
+        let fm = FileManager.default
+        try? fm.createDirectory(atPath: dir, withIntermediateDirectories: true)
+
+        // PATH 안에서 node 실행파일 탐색 — (b) 환경 문제(노드 미발견)를 직접 판별
+        var nodeFound = "NOT FOUND"
+        for d in pathValue.split(separator: ":") {
+            let cand = String(d) + "/node"
+            if fm.isExecutableFile(atPath: cand) { nodeFound = cand; break }
+        }
+        // env 의 값은 토큰 등 민감정보일 수 있으므로 키 목록만 — 누락된 셸 변수(NVM 등) 식별용
+        let envKeys = env.keys.sorted().joined(separator: ",")
+        let stamp = ISO8601DateFormatter().string(from: started)
+        let durMs = Int(Date().timeIntervalSince(started) * 1000)
+        // 출력이 길면 꼬리 8000자만 (PACE_RESULT·RemoteTrigger 결과는 끝부분에 위치)
+        let cappedOut = output.count > 8000 ? "…(앞부분 생략)\n" + String(output.suffix(8000)) : output
+        let entry = """
+        ════════ \(stamp) ════════
+        label   : \(label)
+        claude  : \(claudePath)
+        PATH    : \(pathValue)
+        node    : \(nodeFound)
+        env-keys: \(envKeys)
+        exit    : status=\(exitStatus) timedOut=\(timedOut) durationMs=\(durMs)
+        ───── OUTPUT (stdout+stderr) ─────
+        \(cappedOut)
+        ═══════════════════════════════════════════
+
+        """
+
+        // 무한 증가 방지 — 256KB 초과 시 파일 새로 시작
+        if let attrs = try? fm.attributesOfItem(atPath: path),
+           let size = attrs[.size] as? UInt64, size > 256_000 {
+            try? fm.removeItem(atPath: path)
+        }
+        guard let data = entry.data(using: .utf8) else { return }
+        if let fh = FileHandle(forWritingAtPath: path) {
+            fh.seekToEndOfFile(); fh.write(data); try? fh.close()
+        } else {
+            fm.createFile(atPath: path, contents: data)
+        }
     }
 
     /// 출력에서 PACE_RESULT 줄을 찾아 JSON 파싱. 못 찾거나 ok=false·reason 없으면 errorDetail 채움.
