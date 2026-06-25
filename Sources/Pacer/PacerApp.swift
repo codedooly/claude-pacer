@@ -85,12 +85,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.autoenablesItems = false
         let refresh = menu.addItem(withTitle: tr(lang, "Refresh", "새로고침"), action: #selector(menuRefresh), keyEquivalent: "")
         let settings = menu.addItem(withTitle: tr(lang, "Settings…", "설정…"), action: #selector(menuSettings), keyEquivalent: "")
-        // 로그인(토큰) 전엔 새로고침·설정 비활성
-        refresh.isEnabled = model.authed
-        settings.isEnabled = model.authed
+        // 로그인 게이트 통과 전엔 새로고침·설정 비활성
+        refresh.isEnabled = !model.loginGate
+        settings.isEnabled = !model.loginGate
         menu.addItem(.separator())
         // Update·Help 는 로그인 여부와 무관하게 항상 활성
         menu.addItem(withTitle: tr(lang, "Update…", "업데이트…"), action: #selector(menuUpdate), keyEquivalent: "")
+        menu.addItem(withTitle: tr(lang, "Re-login", "재로그인"), action: #selector(menuRelogin), keyEquivalent: "")
         menu.addItem(withTitle: tr(lang, "Help", "도움말"), action: #selector(menuHelp), keyEquivalent: "")
         // Cloud 루틴 진단 로그를 Finder 에서 노출 (지원·디버깅용)
         menu.addItem(withTitle: tr(lang, "Open Routine Log", "루틴 로그 열기"), action: #selector(openRoutineLog), keyEquivalent: "")
@@ -113,6 +114,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func menuUpdate() {
         // 최신 확인 거침 — 같으면 "최신입니다", 새 버전이면 현재→최신 화살표 확인 (About 과 동일 흐름)
         checkForUpdates()
+    }
+    @objc private func menuRelogin() {
+        // 브라우저 OAuth 재로그인 (토큰 갱신) — 상태 무관 상시 제공
+        Task { await model.login() }
     }
     @objc private func menuQuit() { NSApp.terminate(nil) }
 
@@ -335,9 +340,29 @@ final class UsageModel: ObservableObject {
     @Published var pingMode: String = Config.load().mode
     @Published var holidays: Set<Date> = []
     @Published var authed: Bool = true
+    @Published var authPassed: Bool = (Config.load().authPassed ?? false)   // Pacer 통한 1회 로그인 완료 여부
+    @Published var loggingIn = false                                        // claude auth login 진행 중 (스피너)
+
+    // 로그인 게이트 — Pacer 1회 로그인을 안 했거나(authPassed) 토큰이 없으면(authed) 로그인 화면을 강제
+    var loginGate: Bool { !authPassed || !authed }
 
     // 에러 있고 usage 가 한 번도 안 들어옴 = 첫 설치/인증 실패 (일시적 갱신 실패와 구분)
     var needsConnectionHelp: Bool { error != nil && usage == nil }
+
+    /// claude auth login(브라우저 OAuth) 실행 → 성공 시 authPassed 기록 + 즉시 새로고침.
+    func login() async {
+        loggingIn = true
+        // claude 가 브라우저 로그인 페이지를 띄우고 콜백까지 처리
+        let ok = await AuthService.login()
+        loggingIn = false
+
+        // 성공 시에만 게이트 통과 기록 (실패면 로그인 화면 유지)
+        if ok {
+            var c = Config.load(); c.authPassed = true; c.save()
+            authPassed = true
+            await refresh(force: true)
+        }
+    }
 
     private let service = UsageService()
     private var lastFetch: Date?
@@ -537,13 +562,23 @@ struct MenuContent: View {
                     .foregroundStyle(.white)
                 Spacer()
             }
-            Text(tr(lang, "Run `claude` in your terminal once, then retry.", "터미널에서 `claude` 를 한 번 실행한 뒤 다시 시도하세요."))
+            Text(tr(lang, "Sign in again to refresh your token.", "다시 로그인해 토큰을 갱신하세요."))
                 .font(.system(size: 11))
                 .foregroundStyle(.white.opacity(0.8))
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            // 주 동작 — 브라우저 재로그인
+            Button(action: { Task { await model.login() } }) {
+                HStack(spacing: 6) {
+                    if model.loggingIn { ProgressView().controlSize(.small) }
+                    Text(model.loggingIn ? tr(lang, "Signing in…", "로그인 중…") : tr(lang, "Sign in to Claude", "Claude 로그인"))
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent).tint(.pacerPurple)
+            .disabled(model.loggingIn)
+            // fallback — 터미널 직접 실행 + 토큰 재확인
             HStack(spacing: 8) {
-                // `claude` 클립보드 복사 (터미널에 붙여넣기 유도)
                 Button(tr(lang, "Copy `claude`", "`claude` 복사")) {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString("claude", forType: .string)
@@ -564,7 +599,7 @@ struct MenuContent: View {
 
     var body: some View {
         Group {
-            if model.authed {
+            if !model.loginGate {
                 VStack(spacing: 12) {
                     // 첫 설치/인증 실패: stale 토큰 → 복구 카드로 `claude` 실행 유도
                     if model.needsConnectionHelp {
@@ -587,8 +622,11 @@ struct MenuContent: View {
                     }
                 }
             } else {
-                // 토큰 미감지 → 온보딩 (Retry 시 토큰 재확인 → 자동 전환)
-                OnboardingView(onRetry: { Task { await model.refresh(force: true) } })
+                // 로그인 게이트 — 첫 실행(authPassed=false) 또는 토큰 미감지 → 로그인 화면
+                OnboardingView(
+                    isLoggingIn: model.loggingIn,
+                    onLogin: { Task { await model.login() } },
+                    onRetry: { Task { await model.refresh(force: true) } })
             }
         }
         .padding(16)

@@ -6,6 +6,7 @@ struct Config: Codable, Equatable {
     var skipWeekends: Bool
     var skipHolidays: Bool
     var pingMode: String? = nil   // "local"(launchd) | "cloud"(routine). nil → local
+    var authPassed: Bool? = nil   // Pacer 통한 1회 로그인(claude auth login) 완료 여부. nil/false → 첫 실행 로그인 게이트
 
     /// 현재 핑 방식 (nil 은 local 로 간주).
     var mode: String { pingMode ?? "local" }
