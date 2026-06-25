@@ -294,8 +294,8 @@ struct SettingsView: View {
 
     /// 창 높이 (모드/등록 상태별).
     private var settingsHeight: Int {
-        if mode == "cloud" { return 810 }   // 웹 열기 버튼 추가분
-        return 840                          // Local — routine 섹션 제거로 단축
+        if mode == "cloud" { return 810 }   // Cloud — 루틴(웹 열기) 섹션 포함
+        return 840                          // Local — 주말/공휴일/절전 옵션 포함
     }
 
     /// 콘텐츠 높이 — 단 화면(14" 등)을 넘으면 화면 높이로 클램프 (잘림 방지, 내부 스크롤).

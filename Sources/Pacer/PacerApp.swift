@@ -569,7 +569,7 @@ struct MenuContent: View {
         .background(.ultraThinMaterial, in: Capsule())
     }
 
-    /// 첫 설치/인증 실패 시 복구 카드 — `claude` 한 번 실행해 토큰 갱신 유도.
+    /// 토큰 만료/인증 실패 시 복구 카드 — 브라우저 재로그인(OAuth) 유도, 터미널 `claude` 는 폴백.
     private var connectionHelpCard: some View {
         VStack(spacing: 10) {
             HStack(spacing: 8) {
@@ -619,7 +619,7 @@ struct MenuContent: View {
         Group {
             if !model.loginGate {
                 VStack(spacing: 12) {
-                    // 첫 설치/인증 실패: stale 토큰 → 복구 카드로 `claude` 실행 유도
+                    // 토큰 만료/인증 실패: stale 토큰 → 복구 카드(재로그인 + 터미널 폴백)
                     if model.needsConnectionHelp {
                         connectionHelpCard
                     }
