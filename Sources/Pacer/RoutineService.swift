@@ -62,6 +62,42 @@ enum RoutineService {
         return String(combined[range])
     }
 
+    /// 로그인 셸 env 캐시 — GUI(.app)의 launchd 최소 env 를 터미널과 동일하게 보강 (1회 캡처 후 재사용).
+    static let loginShellEnv: [String: String]? = captureLoginShellEnv()
+
+    /// `$SHELL -ilc 'env -0'` 로 로그인+인터랙티브 셸 env(.zprofile·.zshrc 의 nvm·PATH 포함)를 캡처.
+    /// @returns env 딕셔너리 (실패·타임아웃 시 nil → 호출부가 ProcessInfo env 로 폴백)
+    private static func captureLoginShellEnv() -> [String: String]? {
+        let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: shell)
+        // -i(interactive)+l(login): .zprofile + .zshrc 까지 소싱해야 nvm 등 PATH 확보. env -0: NUL 구분(값에 개행 안전)
+        p.arguments = ["-ilc", "/usr/bin/env -0"]
+        let out = Pipe()
+        p.standardOutput = out
+        p.standardError = Pipe()
+
+        // 인터랙티브 셸 행(p10k 등) 방지 — 세마포어 5초 타임아웃
+        let sem = DispatchSemaphore(value: 0)
+        p.terminationHandler = { _ in sem.signal() }
+        do { try p.run() } catch { return nil }
+        if sem.wait(timeout: .now() + 5) == .timedOut {
+            if p.isRunning { p.terminate() }
+            return nil
+        }
+        guard p.terminationStatus == 0 else { return nil }
+
+        let data = out.fileHandleForReading.readDataToEndOfFile()
+        guard let str = String(data: data, encoding: .utf8) else { return nil }
+        // NUL 구분 KEY=VALUE 파싱
+        var dict: [String: String] = [:]
+        for pair in str.split(separator: "\0") {
+            guard let eq = pair.firstIndex(of: "=") else { continue }
+            dict[String(pair[..<eq])] = String(pair[pair.index(after: eq)...])
+        }
+        return dict.isEmpty ? nil : dict
+    }
+
     /// claude -p 실행 공통 보일러플레이트 — 모델·cwd·PATH·60초 timeout·더블 resume 가드.
     /// @param prompt 전달할 프롬프트
     /// @param label  진단 로그용 호출 식별자 (예: "run register ...", "fetchEnvId")
@@ -72,7 +108,9 @@ enum RoutineService {
         p.executableURL = URL(fileURLWithPath: claudePath)
         // 현재 모델 ID 직접 지정 — CLI 의 sonnet/haiku 단축 alias 는 구버전이면 은퇴 스냅샷으로 풀려 404.
         // 전체 ID 를 주면 CLI 가 그대로 API 로 넘겨 서버가 해석한다.
-        p.arguments = ["--model", "claude-sonnet-4-6", "-p", prompt]
+        // --strict-mcp-config: 사용자 MCP(Gmail·Notion 등) 전부 무시 — RemoteTrigger 는 claude.ai 빌트인이라 생존.
+        // .app 컨텍스트에서 사용자 MCP 로딩 실패가 RemoteTrigger 로딩까지 막던 문제(jisu)를 회피한다.
+        p.arguments = ["--model", "claude-sonnet-4-6", "--strict-mcp-config", "-p", prompt]
         // 빈 전용 cwd — config.json 등 로컬 파일을 모델이 읽고 '이미 설정됨'으로 오판하는 것 방지 (+ TCC 팝업 방지)
         let workDir = NSHomeDirectory() + "/.config/claude-pacer/.skillrun"
         try? FileManager.default.removeItem(atPath: workDir)
@@ -82,10 +120,12 @@ enum RoutineService {
         let err = Pipe()
         p.standardOutput = out
         p.standardError = err
-        // claude 가 하위 도구를 찾도록 PATH 보강
-        var env = ProcessInfo.processInfo.environment
+        // 로그인 셸 env 흡수 — GUI(.app)는 launchd 최소 env 라 node(nvm)·PATH 가 빈약해 claude 하위 도구·훅이 깨진다(bell).
+        var env = loginShellEnv ?? ProcessInfo.processInfo.environment
         let claudeDir = (claudePath as NSString).deletingLastPathComponent
-        let pathValue = "\(claudeDir):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+        // claudeDir 를 PATH 앞에 보장 (셸 PATH 에 이미 있으면 그대로)
+        let shellPath = env["PATH"] ?? "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+        let pathValue = shellPath.contains(claudeDir) ? shellPath : "\(claudeDir):\(shellPath)"
         env["PATH"] = pathValue
         p.environment = env
 
