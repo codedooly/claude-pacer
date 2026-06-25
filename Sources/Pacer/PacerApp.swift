@@ -256,14 +256,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 styleMask: [.titled, .closable],
                 backing: .buffered, defer: false
             )
-            w.title = tr(lang, "Pacer Settings", "Pacer 설정")
-            let host = NSHostingController(rootView: SettingsView())
-            host.sizingOptions = [.preferredContentSize]
-            w.contentViewController = host
             w.isReleasedWhenClosed = false
             w.collectionBehavior = [.moveToActiveSpace]   // 현재 보는 데스크탑(Space)으로 창이 따라옴
             settingsWindow = w
         }
+        // 매 오픈마다 최신 config 로 SettingsView 새로 구성 — 재사용 창이라 init/onAppear 가 stale 되던 문제 방지
+        // (cloud 인데 Local 탭 눌렀다 적용 안 하고 X 로 닫으면, 그 뷰의 mode 상태가 남아 다음에 Local 로 잘못 떠 보이던 버그)
+        settingsWindow?.title = tr(lang, "Pacer Settings", "Pacer 설정")
+        let host = NSHostingController(rootView: SettingsView())
+        host.sizingOptions = [.preferredContentSize]
+        settingsWindow?.contentViewController = host
         popover.performClose(nil)
         NSApp.activate(ignoringOtherApps: true)
         // 매번 현재 화면의 메뉴바 아이콘 아래로 재배치 — 옛 위치/다른 데스크탑 모서리 잔류 방지 (autosave 미사용)
