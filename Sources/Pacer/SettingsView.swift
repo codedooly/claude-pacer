@@ -546,7 +546,12 @@ struct SettingsView: View {
     /// config 저장 + launchd 처리. mode 는 명시적으로 받는다 (Done 전엔 initialMode 로 저장 — 임시 모드 전환이 X 닫기에 새지 않게).
     private func save(mode m: String) {
         let times = hours.sorted().map { String(format: "%02d:00", $0) }
-        let cfg = Config(pingTimes: times, skipWeekends: skipWeekends, skipHolidays: skipHolidays, pingMode: m)
+        // 기존 config 로드 후 관리 필드만 갱신 — authPassed 등 미관리 필드 보존 (새 Config 로 덮으면 날아감)
+        var cfg = Config.load()
+        cfg.pingTimes = times
+        cfg.skipWeekends = skipWeekends
+        cfg.skipHolidays = skipHolidays
+        cfg.pingMode = m
         cfg.save()
         if m == "cloud" {
             PingScheduler.uninstall()

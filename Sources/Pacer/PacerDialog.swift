@@ -9,6 +9,8 @@ enum PacerDialog {
                      buttons: [(label: String, primary: Bool)],
                      icon: NSImage? = NSApp.applicationIconImage,
                      completion: ((Int) -> Void)? = nil) {
+        // 다이얼로그 생성 전에 현재 키 윈도우(설정 등) 기억 — 그 중앙에 띄우기 위함
+        let parent = NSApp.keyWindow ?? NSApp.mainWindow
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 120),
                               styleMask: [.titled, .fullSizeContentView], backing: .buffered, defer: false)
         window.titlebarAppearsTransparent = true
@@ -29,7 +31,16 @@ enum PacerDialog {
         let host = NSHostingController(rootView: view)
         host.sizingOptions = [.preferredContentSize]
         window.contentViewController = host
-        window.center()
+        // SwiftUI 콘텐츠 최종 크기로 윈도우를 맞춘 뒤 위치 계산 (center 가 초기 작은 rect 로 잡혀 모서리로 쏠리던 문제)
+        host.view.layoutSubtreeIfNeeded()
+        window.setContentSize(host.view.fittingSize)
+        if let parent, parent !== window {
+            // 설정 등 부모 윈도우 정중앙
+            let pf = parent.frame, wf = window.frame
+            window.setFrameOrigin(NSPoint(x: pf.midX - wf.width / 2, y: pf.midY - wf.height / 2))
+        } else {
+            window.center()
+        }
         windows.append(window)
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
