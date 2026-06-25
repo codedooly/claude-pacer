@@ -5,7 +5,9 @@ import SwiftUI
 struct OnboardingView: View {
     @AppStorage("pacerLang") private var lang = "en"
     var isLoggingIn: Bool = false      // claude auth login 진행 중 (스피너)
+    var loginURL: URL? = nil           // claude 가 출력한 OAuth URL (자동 안 열릴 때 클릭용)
     var onLogin: () -> Void            // 주 동작 — 브라우저 OAuth 로그인
+    var onCancel: () -> Void = {}      // 로그인 취소 (스피너 해제)
     var onRetry: () -> Void
     @State private var showFallback = false   // "안 되면" 터미널 직접 방법 펼침
 
@@ -49,6 +51,27 @@ struct OnboardingView: View {
             .tint(.pacerPurple)
             .controlSize(.large)
             .disabled(isLoggingIn)
+
+            // 로그인 중 — URL 직접 열기 링크(자동 안 열릴 때) + 취소
+            if isLoggingIn {
+                VStack(spacing: 7) {
+                    if let loginURL {
+                        Link(destination: loginURL) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.up.forward.app")
+                                Text(tr(lang, "Browser didn't open? Open login", "브라우저가 안 열렸나요? 여기로 로그인"))
+                            }
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Color.pacerPurple)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    Button(tr(lang, "Cancel", "취소"), action: onCancel)
+                        .buttonStyle(.plain)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+            }
 
             // fallback — "안 되면" 터미널 직접 방법 (접힘)
             VStack(spacing: 10) {

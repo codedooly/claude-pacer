@@ -261,21 +261,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             host.sizingOptions = [.preferredContentSize]
             w.contentViewController = host
             w.isReleasedWhenClosed = false
-            // 옮긴 위치 기억 — autosave 가 저장값을 자동 복원
-            w.setFrameAutosaveName("PacerSettingsWindow")
-            // 저장된 프레임이 없을 때(첫 오픈)만 메뉴바 아이콘 아래로 위치
-            if !w.setFrameUsingName("PacerSettingsWindow") {
-                positionUnderStatusItem(w)
-            }
+            w.collectionBehavior = [.moveToActiveSpace]   // 현재 보는 데스크탑(Space)으로 창이 따라옴
             settingsWindow = w
         }
         popover.performClose(nil)
         NSApp.activate(ignoringOtherApps: true)
+        // 매번 현재 화면의 메뉴바 아이콘 아래로 재배치 — 옛 위치/다른 데스크탑 모서리 잔류 방지 (autosave 미사용)
+        if let w = settingsWindow { positionUnderStatusItem(w) }
         settingsWindow?.makeKeyAndOrderFront(nil)
     }
 
     /// 설정 창 우측 상단을 메뉴바 아이콘 바로 아래에 맞춘다 (화면 밖이면 clamp).
     private func positionUnderStatusItem(_ w: NSWindow) {
+        w.contentView?.layoutSubtreeIfNeeded()   // 콘텐츠 크기 확정 후 좌표 계산 (첫 오픈 시 크기 어긋남 방지)
         // 메뉴바 버튼의 스크린 좌표
         guard let buttonFrame = statusItem.button?.window?.frame else {
             w.center()
@@ -342,6 +340,7 @@ final class UsageModel: ObservableObject {
     @Published var authed: Bool = true
     @Published var authPassed: Bool = (Config.load().authPassed ?? false)   // Pacer 통한 1회 로그인 완료 여부
     @Published var loggingIn = false                                        // claude auth login 진행 중 (스피너)
+    @Published var loginURL: URL?                                           // claude 가 출력한 OAuth URL (자동 안 열릴 때 클릭용)
 
     // 로그인 게이트 — Pacer 1회 로그인을 안 했거나(authPassed) 토큰이 없으면(authed) 로그인 화면을 강제
     var loginGate: Bool { !authPassed || !authed }
@@ -350,18 +349,35 @@ final class UsageModel: ObservableObject {
     var needsConnectionHelp: Bool { error != nil && usage == nil }
 
     /// claude auth login(브라우저 OAuth) 실행 → 성공 시 authPassed 기록 + 즉시 새로고침.
+    private var loginCancelled = false   // 사용자가 로그인을 취소했는지 (취소면 기존 토큰 있어도 통과 X)
+
     func login() async {
         loggingIn = true
-        // claude 가 브라우저 로그인 페이지를 띄우고 콜백까지 처리
-        let ok = await AuthService.login()
+        loginURL = nil
+        loginCancelled = false
+        // claude 가 브라우저 로그인 페이지를 띄우고 콜백까지 처리 (자동 안 열리면 onURL 로 받은 링크를 UI 에 노출)
+        let ok = await AuthService.login(onURL: { [weak self] url in
+            Task { @MainActor in self?.loginURL = url }
+        })
         loggingIn = false
+        loginURL = nil
 
+        // 취소면 통과 X — 기존 토큰이 있어 status 가 loggedIn 이어도 게이트 유지 (사용자가 명시적으로 그만둠)
+        if loginCancelled { loginCancelled = false; return }
         // 성공 시에만 게이트 통과 기록 (실패면 로그인 화면 유지)
         if ok {
             var c = Config.load(); c.authPassed = true; c.save()
             authPassed = true
             await refresh(force: true)
         }
+    }
+
+    /// 로그인 취소 — 진행 중 프로세스 종료, 스피너 해제 (다시 시도 가능 상태로).
+    func cancelLogin() {
+        loginCancelled = true
+        AuthService.cancelLogin()
+        loggingIn = false
+        loginURL = nil
     }
 
     private let service = UsageService()
@@ -625,7 +641,9 @@ struct MenuContent: View {
                 // 로그인 게이트 — 첫 실행(authPassed=false) 또는 토큰 미감지 → 로그인 화면
                 OnboardingView(
                     isLoggingIn: model.loggingIn,
+                    loginURL: model.loginURL,
                     onLogin: { Task { await model.login() } },
+                    onCancel: { model.cancelLogin() },
                     onRetry: { Task { await model.refresh(force: true) } })
             }
         }
