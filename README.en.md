@@ -41,7 +41,7 @@ Pacer runs on top of the **Claude Code CLI** — end users installing the app **
 | **Run** (install dmg) | macOS 14+ · [Claude Code](https://claude.com/claude-code) installed & logged in (runs on **Node.js**) · Claude Pro / Max subscription |
 | **Build** (from source) | the above + full Xcode · `xcodegen` · `create-dmg` (Homebrew) |
 
-> Claude Code handles the usage token (Keychain), ping firing, and Cloud routine registration, so it's required. Without a token the app shows the onboarding screen. (Claude Code itself runs on Node.js.)
+> Claude Code handles the usage token (Keychain), ping firing, and Cloud routine registration, so it's required. On first launch the app shows a sign-in gate — one browser OAuth flow and you're done. (Claude Code itself runs on Node.js.)
 
 ---
 
@@ -78,6 +78,7 @@ But **schedule pings at 08 / 13 / 18**, and a fresh window opens at each — so 
 | **Ping calendar** | This month's ping history, color-coded by status — `Sent` filled dot, `Auto` outline dot, `Failed` ✕, `Missed`/`Pending` |
 | **Usage heatmap** | Per-day peak by 5-hour slot, displayed as a density heatmap |
 | **Auto-align** | Choose Local (launchd) or Cloud (Routine) to fire pings on schedule |
+| **Pacer Doctor** | Self-diagnose connection issues with traffic-light status — includes Copy diagnostics button |
 
 | Pace tab | Usage tab |
 |---|---|
@@ -86,6 +87,8 @@ But **schedule pings at 08 / 13 / 18**, and a fresh window opens at each — so 
 | Settings — Cloud | Settings — Local |
 |---|---|
 | ![Settings Cloud](assets/screenshot-settings-cloud.png) | ![Settings Local](assets/screenshot-settings-local.png) |
+
+<div align="center"><img src="assets/screenshot-doctor.png" width="460" alt="Pacer Doctor — traffic-light diagnostics" /></div>
 
 ---
 
@@ -151,8 +154,8 @@ Full setup & troubleshooting → **[docs/cloud-setup.en.md](docs/cloud-setup.en.
 - **Plan badge**: `Plan: Max (5x)` (Claude orange)
 - **Donut gauges**: 5-Hour · 7-Day — with reset countdown (clock icon)
 - **Bottom buttons**: Refresh · Settings · Quit
-- **Right-click menu** (menu bar icon): Refresh · **Update** (self-update to the latest dmg) · **Help (About)** · Settings · Quit (Refresh/Settings disabled before login)
-- **About panel**: version · license · source link + **check for updates** (compares with the latest GitHub release → in-app update if newer)
+- **Right-click menu** (menu bar icon): Refresh · **Update** (self-update to the latest dmg) · **Help (About)** · Settings · **Re-login** (re-authenticate via browser OAuth) · **Pacer Doctor** (diagnostics screen) · Quit (Refresh/Settings disabled before login)
+- **About panel**: version · license · source link + **check for updates** (compares with the latest GitHub release → in-app update if newer) — also checked automatically on launch and once daily; a banner appears in the popover card and a purple dot on the menu bar icon when a new version is available
 
 **Pace tab**
 A monthly calendar of ping history, color-coded by status:
@@ -196,9 +199,9 @@ On first run macOS may prompt for **Keychain access** → **Always Allow**. (Uns
 
 ### Onboarding
 
-If no Claude Code token is found in Keychain, the app shows a **"Connect Claude Code"** screen. Install and log in to Claude Code first, then relaunch the app.
+On first launch, the app shows a **"Sign in to Claude"** gate. Tap the sign-in button to open browser OAuth (`claude auth login`); once authorized, the token is saved in the macOS Keychain and the app signs you in automatically from then on.
 
-<div align="center"><img src="assets/screenshot-onboarding.png" width="360" alt="Onboarding screen" /></div>
+<div align="center"><img src="assets/screenshot-onboarding.png" width="360" alt="Sign-in screen" /></div>
 
 ---
 

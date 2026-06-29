@@ -41,7 +41,7 @@ Pacer 는 **Claude Code CLI** 위에서 동작합니다 — 설치해 쓰는 사
 | **실행** (dmg 설치) | macOS 14+ · [Claude Code](https://claude.com/claude-code) 설치·로그인 (**Node.js** 위에서 동작) · Claude Pro / Max 구독 |
 | **빌드** (소스에서) | 위 + 정식 Xcode · `xcodegen` · `create-dmg` (Homebrew) |
 
-> Claude Code 가 사용량 토큰(Keychain)·핑 발사·Cloud routine 등록을 담당하므로 **필수**입니다. 토큰이 없으면 앱이 온보딩 화면을 띄웁니다. (Claude Code 자체는 Node.js 기반)
+> Claude Code 가 사용량 토큰(Keychain)·핑 발사·Cloud routine 등록을 담당하므로 **필수**입니다. 첫 실행 시 앱이 로그인 게이트를 표시하며, 브라우저 OAuth 로 한 번 인증하면 됩니다. (Claude Code 자체는 Node.js 기반)
 
 ---
 
@@ -78,6 +78,7 @@ Pacer 는 **Claude Code CLI** 위에서 동작합니다 — 설치해 쓰는 사
 | **핑 캘린더** | 이번 달 핑 이력을 상태별 색으로 — `Sent` 채운 점, `Auto` 테두리 점, `Failed` ✕, `Missed`/`Pending` |
 | **사용량 히트맵** | 일별 5h 창 슬롯별 피크 히트맵 — 농도로 사용량 확인 |
 | **자동 정렬** | Local(launchd) 또는 Cloud(Routine) 중 선택해 정해진 시각에 자동 핑 |
+| **Pacer 닥터** | 신호등 상태로 연결 문제 셀프 진단 — 진단 내용 복사 기능 포함 |
 
 | Pace 탭 | Usage 탭 |
 |---|---|
@@ -86,6 +87,8 @@ Pacer 는 **Claude Code CLI** 위에서 동작합니다 — 설치해 쓰는 사
 | Settings — Cloud | Settings — Local |
 |---|---|
 | ![Settings Cloud](assets/screenshot-settings-cloud.png) | ![Settings Local](assets/screenshot-settings-local.png) |
+
+<div align="center"><img src="assets/screenshot-doctor.png" width="460" alt="Pacer 닥터 — 신호등 상태로 진단" /></div>
 
 ---
 
@@ -151,8 +154,8 @@ routine 을 등록·갱신하는 지침이 앱 번들에 내장되어 있고, Cl
 - **플랜 배지**: `Plan: Max (5x)` (클로드 주황)
 - **도넛 게이지**: 5-Hour · 7-Day — 리셋 카운트다운(시계 아이콘)
 - **하단 버튼**: 새로고침 · 설정 · 종료
-- **우클릭 메뉴**(메뉴바 아이콘): 새로고침 · **업데이트**(앱에서 최신 dmg 자가 교체) · **도움말(About)** · 설정 · 종료 (로그인 전엔 새로고침·설정 비활성)
-- **About 패널**: 버전 · 라이선스 · 소스 링크 + **업데이트 확인**(GitHub 최신 릴리즈와 비교 → 새 버전이면 인앱 업데이트)
+- **우클릭 메뉴**(메뉴바 아이콘): 새로고침 · **업데이트**(앱에서 최신 dmg 자가 교체) · **도움말(About)** · 설정 · **다시 로그인**(브라우저 OAuth 재인증) · **Pacer 닥터**(진단 화면) · 종료 (로그인 전엔 새로고침·설정 비활성)
+- **About 패널**: 버전 · 라이선스 · 소스 링크 + **업데이트 확인**(GitHub 최신 릴리즈와 비교 → 새 버전이면 인앱 업데이트) — 시작 시·매일 자동 확인, 새 버전이면 팝오버 상단에 배너 + 메뉴바 아이콘에 보라색 점 표시
 
 **Pace 탭**
 이번 달 핑 이력 캘린더. 날짜별 상태:
@@ -196,9 +199,9 @@ open build/Build/Products/Release/Pacer.app
 
 ### 온보딩
 
-Claude Code 토큰이 Keychain 에 없으면 앱이 **"Connect Claude Code"** 안내 화면을 표시합니다. Claude Code 를 먼저 설치·로그인한 뒤 앱을 재시작하세요.
+첫 실행 시 앱이 **"Sign in to Claude"** 게이트를 표시합니다. "Claude에 로그인" 버튼을 누르면 브라우저 OAuth(`claude auth login`)가 열리고, 인증 후 토큰이 macOS Keychain 에 저장됩니다. 이후에는 자동 로그인됩니다.
 
-<div align="center"><img src="assets/screenshot-onboarding.png" width="360" alt="온보딩 화면" /></div>
+<div align="center"><img src="assets/screenshot-onboarding.png" width="360" alt="로그인 화면" /></div>
 
 ---
 

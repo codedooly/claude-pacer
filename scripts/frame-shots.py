@@ -10,7 +10,8 @@
     usage.png           → screenshot-usage.png
     settings-cloud.png  → screenshot-settings-cloud.png
     settings-local.png  → screenshot-settings-local.png
-    onboarding.png      → screenshot-onboarding.png   (있으면)
+    onboarding.png      → screenshot-onboarding.png   (로그인 게이트, 있으면)
+    doctor.png          → screenshot-doctor.png       (Pacer 닥터, 있으면)
 """
 import argparse
 import os
@@ -29,6 +30,7 @@ MAPPING = {
     "settings-cloud.png": "screenshot-settings-cloud.png",
     "settings-local.png": "screenshot-settings-local.png",
     "onboarding.png": "screenshot-onboarding.png",
+    "doctor.png": "screenshot-doctor.png",
 }
 
 
@@ -51,6 +53,50 @@ def autotrim(img: Image.Image, tol: int = 22) -> Image.Image:
     mask = ImageChops.multiply(ImageChops.multiply(masks[0], masks[1]), masks[2])
     bbox = mask.getbbox()
     return img.crop(bbox) if bbox else img
+
+
+def crop_card_body(img: Image.Image, tol: int = 22) -> Image.Image:
+    """팝오버 캡처에서 위쪽 메뉴바 스트립·삼각형 꼬리를 제거.
+
+    메뉴바가 카드와 비슷한 어두운 색이라 autotrim 의 bbox 에 함께 들어온다.
+    카드 채움색이 '가로로 넓게' 차는 행들의 '가장 긴 연속 블록' = 카드 본체.
+    메뉴바(짧은 블록)와 그 아래 간격(desktop)·꼬리(좁음)는 본체와 분리되어 잘려나간다.
+    """
+    from PIL import ImageChops
+
+    rgb = img.convert("RGB")
+    small = rgb.resize((rgb.width // 4 or 1, rgb.height // 4 or 1))
+    fill = max(small.getcolors(small.width * small.height), key=lambda c: c[0])[1]
+    masks = [ch.point(lambda v, f=f: 255 if abs(v - f) <= tol else 0) for ch, f in zip(rgb.split(), fill)]
+    mask = ImageChops.multiply(ImageChops.multiply(masks[0], masks[1]), masks[2])
+
+    px = mask.load()
+    w, h = mask.size
+    step = 4  # 가로 샘플 간격
+    cols = max(1, w // step)
+    wide = [sum(1 for x in range(0, w, step) if px[x, y] > 0) / cols > 0.6 for y in range(h)]
+
+    # 첫 '긴'(>=min_run) wide-run = 카드 본체. 위 메뉴바(짧음)·꼬리, 아래 데스크탑(별도 블록)은 제외.
+    # 본체 내부 narrow 밴드(게이지·구분선)는 GAP 미만이라 런이 안 끊김. 본체 아래는 GAP 이상 narrow(모서리+간격)로 분리.
+    min_run, GAP = 50, 8
+    run_start, cur = None, None
+    for y in range(h):
+        if wide[y]:
+            if cur is None:
+                cur = y
+            if y - cur + 1 >= min_run:
+                run_start = cur
+                break
+        else:
+            cur = None
+    if run_start is None:
+        return img
+    _ = GAP
+    # 상단은 run_start(본체 상단) 기준으로 정밀, 옆·아래는 균일 inset. 바닥은 둥근 모서리+데스크탑 sliver
+    # 제거를 위해 옆/상단보다 크게 (데스크탑이 본체와 동색이라 바닥 자동검출 불안정 → 고정 마진).
+    inset, bottom_inset = 18, 30
+    top = run_start + inset
+    return img.crop((inset, top, w - inset, h - bottom_inset))
 
 
 def rounded(img: Image.Image, radius: int) -> Image.Image:
@@ -112,6 +158,8 @@ def main() -> int:
         img = Image.open(p)
         if not args.no_trim:
             img = autotrim(img)
+            if src in ("pace.png", "usage.png", "onboarding.png"):   # 팝오버 — 위쪽 메뉴바·꼬리 제거
+                img = crop_card_body(img)
         out = frame(img, args.radius, args.pad, args.blur, args.maxw)
         out_path = os.path.join(OUT, dst)
         out.save(out_path)
@@ -124,6 +172,7 @@ def main() -> int:
         img = Image.open(pace)
         if not args.no_trim:
             img = autotrim(img)
+            img = crop_card_body(img)   # pace 는 팝오버 — 메뉴바·꼬리 제거
         hero = frame(img, args.radius, args.pad, args.blur, 600)
         hero.save(os.path.join(OUT, "hero.png"))
         print(f"✓ {'pace.png':24} → assets/hero.png  ({hero.size[0]}x{hero.size[1]})")
