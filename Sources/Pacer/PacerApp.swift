@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pingLogWindow: NSWindow?
     private var settingsWindow: NSWindow?
     private var aboutWindow: NSWindow?
+    private var doctorWindow: NSWindow?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // launchd 가 `Pacer --ping` 으로 부르면 핑만 쏘고 종료
@@ -66,11 +67,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateTitle() {
-        let text = model.usage?.fiveHour.map { " \($0.pct)%" } ?? ""
+        let pct = model.usage?.fiveHour.map { " \($0.pct)%" } ?? ""
         statusItem.button?.attributedTitle = NSAttributedString(
-            string: text,
-            attributes: [.font: NSFont.systemFont(ofSize: 12)] // 메뉴바 기본보다 작게
-        )
+            string: pct, attributes: [.font: NSFont.systemFont(ofSize: 12)]) // 메뉴바 기본보다 작게
+        updateBadge()
+    }
+
+    /// 새 버전 알림 — 아이콘 우상단에 작은 보라 배지 점 (템플릿 아이콘은 그대로, 점만 별도 subview 오버레이).
+    private var badgeDot: NSView?
+    private func updateBadge() {
+        guard let btn = statusItem.button else { return }
+        if model.availableUpdate != nil {
+            let dot = badgeDot ?? {
+                let d = NSView()
+                d.wantsLayer = true
+                d.layer?.backgroundColor = NSColor(red: 0.698, green: 0.353, blue: 0.941, alpha: 1).cgColor
+                d.layer?.cornerRadius = 3
+                btn.addSubview(d)
+                badgeDot = d
+                return d
+            }()
+            dot.frame = NSRect(x: 11, y: btn.bounds.height - 9, width: 6, height: 6)   // 아이콘(leading) 우상단
+        } else {
+            badgeDot?.removeFromSuperview()
+            badgeDot = nil
+        }
     }
 
     /// 좌클릭 → 팝오버, 우클릭 → 메뉴(Refresh/Settings/Quit).
@@ -93,8 +114,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: tr(lang, "Update…", "업데이트…"), action: #selector(menuUpdate), keyEquivalent: "")
         menu.addItem(withTitle: tr(lang, "Re-login", "재로그인"), action: #selector(menuRelogin), keyEquivalent: "")
         menu.addItem(withTitle: tr(lang, "Help", "도움말"), action: #selector(menuHelp), keyEquivalent: "")
-        // Cloud 루틴 진단 로그를 Finder 에서 노출 (지원·디버깅용)
-        menu.addItem(withTitle: tr(lang, "Open Routine Log", "루틴 로그 열기"), action: #selector(openRoutineLog), keyEquivalent: "")
+        // 진단 화면 — claude·토큰·루틴·사용량 신호등 (지원·자가진단용)
+        menu.addItem(withTitle: tr(lang, "Pacer Doctor", "Pacer 닥터"), action: #selector(menuDoctor), keyEquivalent: "")
         #if PACER_DEBUG
         // 디버그 전용 — 팝업 체크 전용 창을 띄워 디자인·언어 토글 확인 (릴리즈 빌드엔 미포함)
         menu.addItem(.separator())
@@ -119,18 +140,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 브라우저 OAuth 재로그인 (토큰 갱신) — 상태 무관 상시 제공
         Task { await model.login() }
     }
+    @objc private func menuDoctor() { openDoctor() }
     @objc private func menuQuit() { NSApp.terminate(nil) }
-
-    /// 루틴 진단 로그를 Finder 에서 선택 노출 — 없으면 폴더만 연다.
-    @objc private func openRoutineLog() {
-        let dir = NSHomeDirectory() + "/.config/claude-pacer"
-        let log = dir + "/routine-debug.log"
-        if FileManager.default.fileExists(atPath: log) {
-            NSWorkspace.shared.selectFile(log, inFileViewerRootedAtPath: "")
-        } else {
-            NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: dir)
-        }
-    }
 
     #if PACER_DEBUG
     // 디버그 전용 — 팝업 체크 전용 창 (언어 토글 + 더미 다이얼로그, 릴리즈 빌드엔 미포함)
@@ -324,6 +335,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         pingLogWindow?.makeKeyAndOrderFront(nil)
     }
+
+    /// Pacer Doctor — claude·토큰·루틴·사용량 진단 화면. 매 오픈마다 새 모델로 최신 점검.
+    private func openDoctor() {
+        let lang = UserDefaults.standard.string(forKey: "pacerLang") ?? "en"
+        if doctorWindow == nil {
+            let w = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 460, height: 440),
+                styleMask: [.titled, .closable], backing: .buffered, defer: false
+            )
+            w.isReleasedWhenClosed = false
+            w.collectionBehavior = [.moveToActiveSpace]   // 현재 보는 데스크탑으로 따라옴
+            doctorWindow = w
+        }
+        // 매 오픈마다 새 DoctorModel — 재사용 창의 stale 진단 방지 (.task 가 다시 점검)
+        doctorWindow?.title = tr(lang, "Pacer Doctor", "Pacer 닥터")
+        let host = NSHostingController(rootView: DoctorView(model: DoctorModel(usage: model)))
+        host.sizingOptions = [.preferredContentSize]
+        doctorWindow?.contentViewController = host
+        popover.performClose(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        doctorWindow?.center()
+        doctorWindow?.makeKeyAndOrderFront(nil)
+    }
 }
 
 /// 메뉴 표시용 상태 + 갱신 로직.
@@ -339,7 +373,9 @@ final class UsageModel: ObservableObject {
     @Published var pingTimes: [String] = Config.load().pingTimes
     @Published var pingMode: String = Config.load().mode
     @Published var holidays: Set<Date> = []
+    @Published var skipWeekends: Bool = false   // Local+주말스킵일 때만 true (캘린더 off 표시용. Cloud 는 매일 발사)
     @Published var authed: Bool = true
+    @Published var availableUpdate: String?   // 최신 릴리즈가 현재보다 새 버전이면 그 버전(배너·아이콘 점). 없으면 nil
     @Published var authPassed: Bool = (Config.load().authPassed ?? false)   // Pacer 통한 1회 로그인 완료 여부
     @Published var loggingIn = false                                        // claude auth login 진행 중 (스피너)
     @Published var loginURL: URL?                                           // claude 가 출력한 OAuth URL (자동 안 열릴 때 클릭용)
@@ -385,10 +421,16 @@ final class UsageModel: ObservableObject {
     private let service = UsageService()
     private var lastFetch: Date?
     private var pollTimer: Timer?
+    private var updateTimer: Timer?
 
     init() {
         authed = service.hasCredentials()
         Task { await refresh() }
+        // 신규 버전 알림 — 실행 시 1회 + 하루마다 (메뉴바 앱은 며칠씩 떠 있으니 타이머도 필요. 같은 버전은 상태값이라 나그 X)
+        Task { await checkUpdate() }
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 24 * 60 * 60, repeats: true) { [weak self] _ in
+            Task { @MainActor in await self?.checkUpdate() }
+        }
         // Cloud 모드면 routine 실제 상태를 백그라운드 확인 (메인 칩 파랑/회색)
         if Config.load().mode == "cloud" {
             Task {
@@ -403,6 +445,16 @@ final class UsageModel: ObservableObject {
         }
     }
 
+    /// 최신 릴리즈 확인 → 현재보다 새 버전이면 availableUpdate 설정 (배너·아이콘 점 표시).
+    func checkUpdate() async {
+        let cur = Updater.currentVersion()
+        if let latest = await Updater.latestVersion(), Updater.isNewer(latest, than: cur) {
+            availableUpdate = latest
+        } else {
+            availableUpdate = nil
+        }
+    }
+
     func refresh(force: Bool = false) async {
         // Keychain(security 서브프로세스)을 refresh 당 1회만 읽어 authed·plan·fetch 로 전달
         let oauth = service.oauthDict()
@@ -411,7 +463,10 @@ final class UsageModel: ObservableObject {
         let cfg = Config.load()
         pingTimes = cfg.pingTimes
         pingMode = cfg.mode
-        holidays = cfg.skipHolidays ? KoreanHolidays.holidays(year: Calendar.current.component(.year, from: Date())) : []
+        // Cloud 모드는 매일 발사(주말·공휴일 스킵 불가) → 캘린더에서 off 처리 안 함. Local 일 때만 스킵 반영.
+        let localSkip = cfg.mode == "local"
+        holidays = (localSkip && cfg.skipHolidays) ? KoreanHolidays.holidays(year: Calendar.current.component(.year, from: Date())) : []
+        skipWeekends = localSkip && cfg.skipWeekends
         pings = PingLog.load()
         plan = service.plan(from: oauth)
         usageHistory = UsageHistory.load()
@@ -501,7 +556,7 @@ struct MenuContent: View {
 
             ZStack(alignment: .top) {
                 if tab == 0 {
-                    PingCalendar(pingTimes: model.pingTimes, pings: model.pings, holidays: model.holidays)
+                    PingCalendar(pingTimes: model.pingTimes, pings: model.pings, holidays: model.holidays, skipWeekends: model.skipWeekends)
                 } else {
                     UsageHeatmap(history: model.usageHistory, pingTimes: model.pingTimes)
                 }
@@ -615,10 +670,30 @@ struct MenuContent: View {
         )
     }
 
+    /// 새 버전 알림 배너 — 탭하면 업데이트 확인창 (현재→최신 화살표).
+    private func updateBanner(_ version: String) -> some View {
+        Button { Updater.runUpdate(latest: version) } label: {
+            HStack(spacing: 7) {
+                Image(systemName: "sparkles")
+                Text(tr(lang, "New version \(version) — Update", "새 버전 \(version) — 업데이트"))
+                    .font(.system(size: 11.5, weight: .semibold))
+                Spacer()
+                Image(systemName: "arrow.down.circle.fill")
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .frame(maxWidth: .infinity)
+            .background(Color.pacerPurple, in: RoundedRectangle(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
+    }
+
     var body: some View {
         Group {
             if !model.loginGate {
                 VStack(spacing: 12) {
+                    // 새 버전 알림 배너 — 있을 때만 (탭 → 업데이트 확인창)
+                    if let v = model.availableUpdate { updateBanner(v) }
                     // 토큰 만료/인증 실패: stale 토큰 → 복구 카드(재로그인 + 터미널 폴백)
                     if model.needsConnectionHelp {
                         connectionHelpCard

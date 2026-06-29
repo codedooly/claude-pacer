@@ -583,3 +583,8 @@ private final class WAView: NSView {
         if let w = window, !done { done = true; onWindow?(w) }
     }
 }
+
+
+#Preview {
+    SettingsView()
+}

@@ -23,6 +23,16 @@ enum Updater {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
     }
 
+    /// fetchLatest 의 async 래퍼 (주기 업데이트 체크용).
+    static func latestVersion() async -> String? {
+        await withCheckedContinuation { c in fetchLatest { c.resume(returning: $0) } }
+    }
+
+    /// latest 가 current 보다 새 버전인지 — 숫자 비교(1.2.0 > 1.1.11 정확히).
+    static func isNewer(_ latest: String, than current: String) -> Bool {
+        latest.compare(current, options: .numeric) == .orderedDescending
+    }
+
     /// 확인창 → 헬퍼 스크립트 작성·실행 → 앱 종료. 스크립트가 교체·재실행을 마무리한다.
     /// @param latest 최신 버전 (알면 현재→최신 화살표 표시, 모르면 일반 문구)
     @MainActor static func runUpdate(latest: String? = nil) {

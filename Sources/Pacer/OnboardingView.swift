@@ -118,7 +118,7 @@ struct OnboardingView: View {
     /// 언어 토글 — 워드마크 줄 우측 (EN / 한). 온보딩은 Settings 못 가니 여기서 전환.
     private var langToggle: some View {
         HStack(spacing: 2) {
-            langButton("EN", "en")
+            langButton("English", "en")
             langButton("한국어", "ko")
         }
     }

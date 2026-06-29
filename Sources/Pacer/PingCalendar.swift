@@ -5,7 +5,8 @@ import SwiftUI
 struct PingCalendar: View {
     let pingTimes: [String]
     let pings: [String: String] // "yyyy-MM-dd|HH:mm" -> "sent"/"failed"
-    let holidays: Set<Date>     // skip_holidays 시 표시할 공휴일 (startOfDay)
+    let holidays: Set<Date>     // skip_holidays 시 표시할 공휴일 (startOfDay). Cloud 모드면 빈 셋(매일 발사)
+    let skipWeekends: Bool      // Local 모드에서 주말 스킵 시에만 true. Cloud 는 매일 발사라 false
 
     @AppStorage("pacerLang") private var lang = "en"
     private let cal = Calendar.current
@@ -40,9 +41,14 @@ struct PingCalendar: View {
     @ViewBuilder
     private func cell(day: Int, monthStart: Date, today: Date) -> some View {
         let date = cal.date(byAdding: .day, value: day - 1, to: monthStart)!
-        let isWeekend = cal.isDateInWeekend(date)
         let isHoliday = holidays.contains(cal.startOfDay(for: date))
-        let isOff = isWeekend || isHoliday
+        // 스킵 적용일 = Local+주말스킵 주말 또는 (Local) 공휴일. Cloud 면 skipWeekends=false·holidays=[] 라 항상 false.
+        let skipApplies = (skipWeekends && cal.isDateInWeekend(date)) || isHoliday
+        let logged = loggedSlots(date)
+        // 실제 찍힌 핑이 있으면(모드 전환 등) 스킵일이어도 진짜 점 표시. 스킵일+무로그만 off 처리.
+        let isOff = skipApplies && logged.isEmpty
+        // 점 슬롯: 스킵 적용일이면 실제 로그된 것만, 아니면 설정 슬롯 ∪ 로그
+        let slots = skipApplies ? logged.sorted() : Array(Set(pingTimes).union(logged)).sorted()
         let isFuture = date > today && !cal.isDate(date, inSameDayAs: today)
         let dim = isOff || isFuture
 
@@ -54,7 +60,7 @@ struct PingCalendar: View {
                 if isOff {
                     Circle().fill(Color(white: 0.30)).frame(width: 4.5, height: 4.5)
                 } else {
-                    ForEach(slotsFor(date), id: \.self) { slot in
+                    ForEach(slots, id: \.self) { slot in
                         dot(status: status(date: date, slot: slot, today: today))
                     }
                 }
@@ -76,14 +82,12 @@ struct PingCalendar: View {
         }
     }
 
-    /// 셀에 그릴 슬롯 = 그날 실제 로그된 슬롯 ∪ 현재 설정 슬롯 (시각순).
-    /// 설정을 바꿔도 과거에 찍힌 핑은 로그 기반이라 보존된다.
-    private func slotsFor(_ date: Date) -> [String] {
+    /// 그날 실제 로그된 슬롯 목록 (정렬 전). 설정을 바꿔도 과거 핑은 로그 기반이라 보존.
+    private func loggedSlots(_ date: Date) -> [String] {
         let prefix = "\(Self.dateStr(date))|"
-        let logged = pings.keys.compactMap { key in
+        return pings.keys.compactMap { key in
             key.hasPrefix(prefix) ? String(key.dropFirst(prefix.count)) : nil
         }
-        return Array(Set(pingTimes).union(logged)).sorted()
     }
 
     private func status(date: Date, slot: String, today: Date) -> String {

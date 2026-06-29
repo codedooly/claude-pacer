@@ -6,8 +6,8 @@ options:
   createIntermediateGroups: true
 settings:
   base:
-    MARKETING_VERSION: "1.1.11"
-    CURRENT_PROJECT_VERSION: "13"
+    MARKETING_VERSION: "1.2.0"
+    CURRENT_PROJECT_VERSION: "14"
 targets:
   Pacer:
     type: application

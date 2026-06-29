@@ -39,6 +39,31 @@ enum ClaudeCLI {
         return dict.isEmpty ? nil : dict
     }
 
+    /// `claude --version` → 버전 문자열(예: "2.1.191"). 실패 시 nil. (Doctor 진단용)
+    static func version() async -> String? {
+        let path = PingRunner.claudePath()
+        let r = await run(executable: path, args: ["--version"], env: env(for: path), timeout: 15)
+        guard let m = r.output.range(of: "[0-9]+\\.[0-9]+\\.[0-9]+", options: .regularExpression) else { return nil }
+        return String(r.output[m])
+    }
+
+    /// PATH·알려진 위치에서 발견되는 모든 claude 경로 (which -a 격) — 다중 설치 감지용.
+    /// 첫 항목이 실제로 Pacer 가 쓰는 것(PingRunner.claudePath 와 동일 순서).
+    static func allClaudePaths() -> [String] {
+        let fm = FileManager.default
+        var seen = Set<String>()
+        var result: [String] = []
+        let add: (String) -> Void = { c in
+            guard fm.isExecutableFile(atPath: c), !seen.contains(c) else { return }
+            seen.insert(c); result.append(c)
+        }
+        let shellPath = loginShellEnv?["PATH"] ?? ProcessInfo.processInfo.environment["PATH"] ?? ""
+        for dir in shellPath.split(separator: ":") { add(String(dir) + "/claude") }
+        // PATH 에 없을 수도 있는 알려진 위치
+        for c in [NSHomeDirectory() + "/.local/bin/claude", "/opt/homebrew/bin/claude", "/usr/local/bin/claude"] { add(c) }
+        return result
+    }
+
     /// claude 실행용 env — 로그인 셸 env 흡수 + claudeDir 를 PATH 앞에 보장.
     /// @param claudePath 실행할 claude 절대경로
     static func env(for claudePath: String) -> [String: String] {
