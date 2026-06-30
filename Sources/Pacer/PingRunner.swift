@@ -30,17 +30,40 @@ enum PingRunner {
         let f = DateFormatter(); f.dateFormat = "HH:mm"; return f.string(from: Date())
     }
 
-    /// 5시간 창을 여는 최소 프롬프트.
+    /// 5시간 창을 여는 최소 프롬프트. launchd 핑은 격리 실행 — 인터랙티브 셸 소싱·홈 스캔을 피해
+    /// 사진·음악 등 보호폴더 TCC 권한 팝업이 뜨지 않게 한다.
     private static func fireClaude() -> Bool {
+        let bin = pingClaudePath()
         let p = Process()
-        p.executableURL = URL(fileURLWithPath: claudePath())
+        p.executableURL = URL(fileURLWithPath: bin)
         // 현재 모델 ID 직접 지정 — 단축 alias 는 구버전 CLI 에서 은퇴 스냅샷으로 풀려 404. 핑은 저렴 모델로 충분
         p.arguments = ["--model", "claude-haiku-4-5-20251001", "-p", "ok"]
+        // 빈 전용 cwd — claude 가 홈/보호폴더(사진·음악·문서)를 스캔해 권한 팝업 뜨는 것 방지
+        let workDir = NSHomeDirectory() + "/.config/claude-pacer/.skillrun"
+        try? FileManager.default.createDirectory(atPath: workDir, withIntermediateDirectories: true)
+        p.currentDirectoryURL = URL(fileURLWithPath: workDir)
+        // 깨끗한 PATH — 인터랙티브 셸(.zshrc) 소싱 없이. launchd 핑에서 셸 도구가 보호폴더 건드리는 것 방지
+        var env = ProcessInfo.processInfo.environment
+        let claudeDir = (bin as NSString).deletingLastPathComponent
+        env["PATH"] = "\(claudeDir):/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+        p.environment = env
         p.standardOutput = Pipe()
         p.standardError = Pipe()
         do { try p.run() } catch { return false }
         p.waitUntilExit()
         return p.terminationStatus == 0
+    }
+
+    /// 핑 전용 claude 탐색 — 알려진 위치만 (인터랙티브 셸 소싱 X → launchd 권한 팝업 방지).
+    /// .local/bin 우선(standalone 최신본). 핑은 `claude -p ok` 뿐이라 구버전이어도 동작.
+    private static func pingClaudePath() -> String {
+        let candidates = [
+            NSHomeDirectory() + "/.local/bin/claude",
+            "/opt/homebrew/bin/claude",
+            "/usr/local/bin/claude",
+        ]
+        for c in candidates where FileManager.default.isExecutableFile(atPath: c) { return c }
+        return "/opt/homebrew/bin/claude"
     }
 
     /// 터미널이 쓰는 바로 그 claude 를 선택 — 로그인 셸 PATH 를 순서대로 탐색.
