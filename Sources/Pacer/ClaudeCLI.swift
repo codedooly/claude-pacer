@@ -12,8 +12,10 @@ enum ClaudeCLI {
         let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
         let p = Process()
         p.executableURL = URL(fileURLWithPath: shell)
-        // -i(interactive)+l(login): .zprofile + .zshrc 까지 소싱해야 nvm 등 PATH 확보. env -0: NUL 구분(값에 개행 안전)
-        p.arguments = ["-ilc", "/usr/bin/env -0"]
+        // -l(login, 비인터랙티브): .zshenv·.zprofile·.zlogin 만 소싱 — .zshrc(인터랙티브)는 제외.
+        // 인터랙티브 도구(zoxide·플러그인 등)가 보호폴더 건드려 TCC 권한 팝업 뜨던 것 방지. 로그인 PATH 는 유지.
+        // (claude 경로는 후보 탐색이, node 는 --setting-sources 격리가 커버 → .zshrc 안 봐도 무방)
+        p.arguments = ["-lc", "/usr/bin/env -0"]
         let out = Pipe()
         p.standardOutput = out
         p.standardError = Pipe()
