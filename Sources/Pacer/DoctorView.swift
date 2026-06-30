@@ -29,16 +29,19 @@ final class DoctorModel: ObservableObject {
         // claude 비의존 체크 즉시 + claude 의존 체크는 로딩 표시
         checks = [
             DoctorCheck(id: "claude", title: "Claude Code", level: .loading, detail: tr(lang, "Checking…", "확인 중…")),
+            nodeCheck(),
             DoctorCheck(id: "login", title: tr(lang, "Sign-in", "로그인"), level: .loading, detail: tr(lang, "Checking…", "확인 중…")),
             usageCheck(),
             DoctorCheck(id: "sched", title: tr(lang, "Ping schedule", "핑 스케줄"), level: .loading, detail: tr(lang, "Checking…", "확인 중…")),
+            DoctorCheck(id: "version", title: tr(lang, "Pacer version", "Pacer 버전"), level: .loading, detail: tr(lang, "Checking…", "확인 중…")),
         ]
-        // claude 의존 3종 동시 실행 + 끝나는 대로 즉시 갱신 — 느린 루틴(~20s)이 빠른 claude·로그인(~2s)을 안 막게
+        // claude 의존 + 버전 체크 동시 실행 + 끝나는 대로 즉시 갱신 — 느린 루틴(~20s)이 빠른 것들을 안 막게
         // (cwd 충돌은 routine 만 .skillrun 써서 무관)
         await withTaskGroup(of: DoctorCheck.self) { group in
             group.addTask { await self.claudeCheck() }
             group.addTask { await self.loginCheck() }
             group.addTask { await self.scheduleCheck() }
+            group.addTask { await self.versionCheck() }
             for await check in group { update(check) }
         }
         running = false
@@ -83,6 +86,32 @@ final class DoctorModel: ObservableObject {
         return DoctorCheck(id: "login", title: tr(lang, "Sign-in", "로그인"), level: .fail,
             detail: tr(lang, "Not signed in", "로그인 안 됨"),
             actionLabel: tr(lang, "Sign in", "로그인"), action: { [usage] in Task { await usage.login() } })
+    }
+
+    /// Node.js — claude 가 쓰는 PATH 에서 node 탐색 (없어도 핵심 동작엔 무방, 일부 플러그인·MCP 용).
+    private func nodeCheck() -> DoctorCheck {
+        let path = ClaudeCLI.env(for: PingRunner.claudePath())["PATH"] ?? ""
+        for dir in path.split(separator: ":") {
+            let c = String(dir) + "/node"
+            if FileManager.default.isExecutableFile(atPath: c) {
+                return DoctorCheck(id: "node", title: "Node.js", level: .ok, detail: c)
+            }
+        }
+        return DoctorCheck(id: "node", title: "Node.js", level: .warn,
+            detail: tr(lang, "Not in PATH (optional — some plugins/MCP need it)", "PATH 에 없음 (선택 — 일부 플러그인·MCP 용)"))
+    }
+
+    /// Pacer 버전 — 최신 릴리즈를 직접 확인(닥터 열 때마다). 새 버전 있으면 🟡 + 업데이트 버튼.
+    private func versionCheck() async -> DoctorCheck {
+        let ver = Updater.currentVersion()
+        let latest = await Updater.latestVersion()
+        if let latest, Updater.isNewer(latest, than: ver) {
+            return DoctorCheck(id: "version", title: tr(lang, "Pacer version", "Pacer 버전"), level: .warn,
+                detail: tr(lang, "\(ver) — update \(latest) available", "\(ver) — 새 버전 \(latest) 있음"),
+                actionLabel: tr(lang, "Update", "업데이트"), action: { Updater.runUpdate(latest: latest) })
+        }
+        return DoctorCheck(id: "version", title: tr(lang, "Pacer version", "Pacer 버전"), level: .ok,
+            detail: tr(lang, "\(ver) (latest)", "\(ver) (최신)"))
     }
 
     /// 사용량 API — UsageModel 상태 기반(claude 호출 없음).
