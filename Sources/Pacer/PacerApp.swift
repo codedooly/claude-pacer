@@ -109,21 +109,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 로그인 게이트 통과 전엔 새로고침·설정 비활성
         refresh.isEnabled = !model.loginGate
         settings.isEnabled = !model.loginGate
+        // 닥터(자가진단) — 업데이트 위로(업데이트는 배너·아이콘 배지·닥터 내부에서도 노출되므로 하위). 이어서 계정·유지보수
         menu.addItem(.separator())
-        // Update·Help 는 로그인 여부와 무관하게 항상 활성
+        menu.addItem(withTitle: tr(lang, "Doctor", "닥터"), action: #selector(menuDoctor), keyEquivalent: "")
         menu.addItem(withTitle: tr(lang, "Update…", "업데이트…"), action: #selector(menuUpdate), keyEquivalent: "")
         menu.addItem(withTitle: tr(lang, "Re-login", "재로그인"), action: #selector(menuRelogin), keyEquivalent: "")
-        menu.addItem(withTitle: tr(lang, "Help", "도움말"), action: #selector(menuHelp), keyEquivalent: "")
-        // 진단 화면 — claude·토큰·루틴·사용량 신호등 (지원·자가진단용)
-        menu.addItem(withTitle: tr(lang, "Pacer Doctor", "Pacer 닥터"), action: #selector(menuDoctor), keyEquivalent: "")
-        #if PACER_DEBUG
-        // 디버그 전용 — 팝업 체크 전용 창을 띄워 디자인·언어 토글 확인 (릴리즈 빌드엔 미포함)
+        // 지원 그룹 — 도움말·(디버그) 팝업체크
         menu.addItem(.separator())
-        let dbgItem = menu.addItem(withTitle: "🧪 팝업 체크", action: #selector(openDebugPopups), keyEquivalent: "")
-        dbgItem.target = self
+        menu.addItem(withTitle: tr(lang, "Help", "도움말"), action: #selector(menuHelp), keyEquivalent: "")
+        #if PACER_DEBUG
+        // 디버그 전용 — 팝업 체크 창(디자인·언어 토글 확인). 릴리즈 빌드엔 미포함
+        menu.addItem(withTitle: "🧪 팝업 체크", action: #selector(openDebugPopups), keyEquivalent: "")
         #endif
         menu.addItem(.separator())
-        menu.addItem(withTitle: tr(lang, "Quit Pacer", "Pacer 종료"), action: #selector(menuQuit), keyEquivalent: "")
+        menu.addItem(withTitle: tr(lang, "Quit", "종료"), action: #selector(menuQuit), keyEquivalent: "")
         for item in menu.items { item.target = self }
         if let btn = statusItem.button {
             menu.popUp(positioning: nil, at: NSPoint(x: 0, y: btn.bounds.height + 4), in: btn)
@@ -193,6 +192,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             w.appearance = NSAppearance(named: .darkAqua)
             w.isReleasedWhenClosed = false
             w.isMovableByWindowBackground = true
+            w.collectionBehavior = [.moveToActiveSpace]   // 현재 데스크탑으로 따라옴
             let about = AboutView(
                 onCheckUpdate: { [weak self] in self?.checkForUpdates() },
                 onGitHub: { NSWorkspace.shared.open(URL(string: "https://github.com/codedooly/claude-pacer")!) },
@@ -203,11 +203,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let host = NSHostingController(rootView: about)
             host.sizingOptions = [.preferredContentSize]
             w.contentViewController = host
-            w.center()
             aboutWindow = w
         }
         popover.performClose(nil)
         NSApp.activate(ignoringOtherApps: true)
+        if let w = aboutWindow { positionUpperCenter(w) }   // 매 오픈 현재 데스크탑 중앙 상단
         aboutWindow?.makeKeyAndOrderFront(nil)
     }
 
@@ -305,6 +305,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         w.setFrameOrigin(origin)
     }
 
+    /// 창을 현재 데스크탑(마우스가 있는 화면) 중앙 상단에 배치 — 정중앙보다 위(세로 62% 지점).
+    private func positionUpperCenter(_ w: NSWindow) {
+        w.contentView?.layoutSubtreeIfNeeded()   // 콘텐츠 크기 확정 후 좌표 계산
+        let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) } ?? NSScreen.main
+        guard let vis = screen?.visibleFrame else { w.center(); return }
+        let wf = w.frame
+        w.setFrameOrigin(NSPoint(x: vis.midX - wf.width / 2,
+                                 y: vis.minY + vis.height * 0.70 - wf.height / 2))
+    }
+
     @objc private func togglePopover() {
         guard let btn = statusItem.button else { return }
         if popover.isShown {
@@ -312,6 +322,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             NSApp.activate(ignoringOtherApps: true)
             popover.show(relativeTo: btn.bounds, of: btn, preferredEdge: .minY)
+            // 팝오버 창을 key 로 — 세그먼트 탭 등 컨트롤이 활성색(회색 아님)으로 그려지도록
+            popover.contentViewController?.view.window?.makeKey()
+            model.popoverOpenNonce += 1   // 캘린더를 이번 달로 리셋 (재사용 뷰라 onDisappear 미발화 대비)
             Task { await model.refresh() }
         }
     }
@@ -326,9 +339,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             w.title = "Pacer — Pace Log"
             w.contentViewController = NSHostingController(rootView: PingLogView())
-            w.center()
             w.isReleasedWhenClosed = false
             w.collectionBehavior = [.moveToActiveSpace]   // 현재 보는 데스크탑으로 창이 따라옴 (Space 점프 방지)
+            // 종료한 위치에서 다시 오픈 — 저장된 프레임 복원, 없으면 중앙 (앱 재실행 후에도 유지)
+            if !w.setFrameUsingName("PacerPingLog") { w.center() }
+            w.setFrameAutosaveName("PacerPingLog")
             pingLogWindow = w
         }
         popover.performClose(nil)
@@ -346,6 +361,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             w.isReleasedWhenClosed = false
             w.collectionBehavior = [.moveToActiveSpace]   // 현재 보는 데스크탑으로 따라옴
+            // 종료한 위치에서 다시 오픈 — 저장된 프레임 복원, 없으면 중앙
+            if !w.setFrameUsingName("PacerDoctor") { w.center() }
+            w.setFrameAutosaveName("PacerDoctor")
             doctorWindow = w
         }
         // 매 오픈마다 새 DoctorModel — 재사용 창의 stale 진단 방지 (.task 가 다시 점검)
@@ -355,8 +373,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         doctorWindow?.contentViewController = host
         popover.performClose(nil)
         NSApp.activate(ignoringOtherApps: true)
-        doctorWindow?.center()
-        doctorWindow?.makeKeyAndOrderFront(nil)
+        doctorWindow?.makeKeyAndOrderFront(nil)   // center() 제거 → 마지막 위치 유지
     }
 }
 
@@ -366,6 +383,7 @@ final class UsageModel: ObservableObject {
     @Published var usage: Usage?
     @Published var plan: String?
     @Published var error: String?
+    @Published var popoverOpenNonce = 0   // 팝오버 열 때마다 +1 → 캘린더를 이번 달로 리셋하는 신호
     @Published var updatedAt: Date?
     @Published var pings: [String: String] = [:]
     @Published var usageHistory: [String: [String: Int]] = [:]
@@ -513,56 +531,86 @@ struct MenuContent: View {
     var onPingLog: () -> Void = {}
     var onSettings: () -> Void = {}
     @State private var tab = 0
+    @State private var monthOffset = 0   // 캘린더/히트맵 표시 월 (0=이번 달, -1=지난 달 …). 데이터 없는 달은 빈 캘린더
     @AppStorage("pacerLang") private var lang = "en"
     @AppStorage("routineHealthy") private var routineHealthy = true
 
     /// 이번 달 주 수에 맞춘 캘린더 영역 높이 (두 탭 공통 → 탭 전환 시 흔들림 없음).
     private var calendarHeight: CGFloat {
         let cal = Calendar.current
-        let now = Date()
+        let now = cal.date(byAdding: .month, value: monthOffset, to: Date()) ?? Date()
         let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: now))!
         let days = cal.range(of: .day, in: .month, for: now)!.count
         let leading = cal.component(.weekday, from: monthStart) - 1
         let weeks = Int(ceil(Double(leading + days) / 7.0))
-        return CGFloat(weeks) * 41 + 44 // 행(셀32+간격9) + 요일헤더 + 범례
+        return CGFloat(weeks) * 41 + 66 // 행(셀32+간격9) + 요일헤더 + 범례 + 범례 아래 여백(구분선과 안 겹치게)
     }
 
     /// 카드 본문 — usage 가 없어도 골격(캘린더 · 초기값 도넛)을 그린다.
     private var cardBody: some View {
-        VStack(spacing: 9) {
+        VStack(spacing: 14) {   // 로고·탭·날짜/이동·캘린더 라인 간 여유 (좁아 보이지 않게)
             // 브랜드 워드마크 (Pacer 각인)
             Image("Wordmark").resizable().scaledToFit().frame(height: 24)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            Picker("", selection: $tab) {
-                Text(tr(lang, "Pace", "페이스")).tag(0)
-                Text(tr(lang, "Usage", "사용량")).tag(1)
+            // Pace/Usage 탭 — 콤팩트 캡슐 토글(가운데 정렬), 선택 쪽 보라 채움. 애플 캘린더 세그먼트 톤
+            HStack(spacing: 4) {
+                tabButton(tr(lang, "Pace", "페이스"), 0)
+                tabButton(tr(lang, "Usage", "사용량"), 1)
             }
-            .pickerStyle(.segmented).labelsHidden().tint(.pacerPurple)
+            .padding(3)
+            .background(Color.white.opacity(0.06), in: Capsule())
+            .animation(.easeInOut(duration: 0.15), value: tab)
+            .padding(.top, -6)   // 로고 라인 ↔ 탭 라인 간격만 좁게 (아래 라인들은 여유 유지)
 
             HStack {
-                Text(Self.monthLabel(lang)).font(.system(size: 13, weight: .semibold))
+                // 월 라벨(좌) — 탭 → 이번 달 복귀
+                Button(action: { monthOffset = 0 }) {
+                    Text(Self.monthLabel(lang, monthOffset)).font(.system(size: 13, weight: .semibold)).foregroundStyle(.primary)
+                }
+                .buttonStyle(.plain)
                 Spacer()
+                // Pace log — 목록 아이콘(옵션3, Pace 탭만). 텍스트 없이 아이콘화라 범례 줄 오버플로 없음
                 if tab == 0 {
                     Button(action: onPingLog) {
-                        Text(tr(lang, "Pace log ›", "페이스 로그 ›")).font(.system(size: 11)).foregroundStyle(Color.pacerPurple)
+                        Image(systemName: "list.bullet")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Color.pacerPurple)
+                            .frame(width: 24, height: 24)
+                            .background(Color.white.opacity(0.06), in: Circle())
+                            .contentShape(Circle())
                     }
                     .buttonStyle(.plain)
-                } else {
-                    Text(tr(lang, "peak per 5h window", "5시간 창별 피크"))
-                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .help(tr(lang, "Pace log", "페이스 로그"))
+                    .padding(.trailing, 6)
+                }
+                // 월 이동(우측 고정, Itsycal ◀ ● ▶) — 우측 앵커라 라벨 폭이 변해도 화살표 x 고정. ● = 오늘
+                HStack(spacing: 3) {
+                    monthNavButton("arrowtriangle.left.fill") { monthOffset -= 1 }
+                    // 오늘 — 작은 텍스트 pill(애플 ‹ 오늘 › 스타일). 이번 달이면 흐리게 + 비활성
+                    Button(action: { monthOffset = 0 }) {
+                        Text(tr(lang, "Today", "오늘"))
+                            .font(.system(size: 9.5, weight: .semibold))
+                            .foregroundStyle(monthOffset == 0 ? Color.secondary.opacity(0.4) : Color.pacerPurple)
+                            .padding(.horizontal, 8).frame(height: 22)
+                            .background(Color.white.opacity(0.06), in: Capsule())
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(monthOffset == 0)
+                    monthNavButton("arrowtriangle.right.fill") { monthOffset += 1 }
                 }
             }
 
             ZStack(alignment: .top) {
                 if tab == 0 {
-                    PingCalendar(pingTimes: model.pingTimes, pings: model.pings, holidays: model.holidays, skipWeekends: model.skipWeekends)
+                    PingCalendar(pingTimes: model.pingTimes, pings: model.pings, holidays: model.holidays, skipWeekends: model.skipWeekends, monthOffset: monthOffset)
                 } else {
-                    UsageHeatmap(history: model.usageHistory, pingTimes: model.pingTimes)
+                    UsageHeatmap(history: model.usageHistory, pingTimes: model.pingTimes, monthOffset: monthOffset)
                 }
             }
             .frame(height: calendarHeight, alignment: .top)   // 탭 전환 시 높이 고정 (캘린더/히트맵 동일)
-            .padding(.top, 6)        // 년·월 라인 ↔ 요일 라인 간격
+            .padding(.top, 4)        // 날짜/이동 라인 ↔ 요일 라인 간격 (상위 VStack spacing 14 와 합산)
 
             Divider()
                 .frame(maxWidth: .infinity)
@@ -583,9 +631,36 @@ struct MenuContent: View {
                 DonutGauge(pct: model.usage?.fiveHour?.pct ?? 0, label: tr(lang, "5-Hour", "5시간"), sub: Self.remaining(model.usage?.fiveHour?.resetsAt, lang))
                 DonutGauge(pct: model.usage?.sevenDay?.pct ?? 0, label: tr(lang, "7-Day", "7일"), sub: Self.remaining(model.usage?.sevenDay?.resetsAt, lang))
             }
-            // plan/모드 라인 ↔ 도넛 사이 공간 (사용자 요청 — 이 라인을 띄움)
-            .padding(.top, 20)
+            // plan/모드 라인 ↔ 도넛 사이 공간
+            .padding(.top, 10)
         }
+    }
+
+    /// Pace/Usage 탭 한 칸 — 선택 시 보라 채움·흰 글자, 미선택은 회색. 풀폭(maxWidth) 분할.
+    private func tabButton(_ title: String, _ index: Int) -> some View {
+        Button(action: { tab = index }) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(tab == index ? .white : Color.secondary)
+                .padding(.horizontal, 22)
+                .padding(.vertical, 5)
+                .background(tab == index ? Color.pacerPurple : Color.clear, in: Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// 월 이동 버튼 — 28pt 원형(넉넉한 히트영역), 서브틀 배경. 눌림 반응 확실.
+    private func monthNavButton(_ icon: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 24, height: 24)
+                .background(Color.white.opacity(0.06), in: Circle())   // 애플 캘린더식 살짝 흐린 버튼 영역
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
     }
 
     /// 핑 방식 배지 — Local(초록) / Cloud 정상(파랑) / Cloud 끊김(회색).
@@ -707,6 +782,8 @@ struct MenuContent: View {
                         }
 
                     Divider()
+                        .padding(.top, 10)     // 도넛(시간) ↔ 구분선 위 여백
+                        .padding(.bottom, 3)   // 구분선 ↔ 버튼 간격은 좁게 (하단 카드 여백과 균형)
                     HStack {
                         Button(tr(lang, "Refresh", "새로고침")) { Task { await model.refresh(force: true) } }
                         Button(tr(lang, "Settings", "설정")) { onSettings() }
@@ -728,11 +805,13 @@ struct MenuContent: View {
         .frame(width: 348)
         .background(Color(red: 0.11, green: 0.11, blue: 0.125)) // 불투명 다크 — 팝오버 반투명 비침 방지
         .task { await model.refresh() }
+        // 팝오버 열 때마다(nonce 증가) 이번 달로 리셋 — 재사용 호스팅이라 onDisappear 가 안 먹어 nonce 로 감지
+        .onChange(of: model.popoverOpenNonce) { monthOffset = 0 }
     }
 
     /// 월 표기 — "2026.06 (June)" / "2026.06 (6월)".
-    static func monthLabel(_ lang: String) -> String {
-        let now = Date()
+    static func monthLabel(_ lang: String, _ offset: Int = 0) -> String {
+        let now = Calendar.current.date(byAdding: .month, value: offset, to: Date()) ?? Date()
         let ym = DateFormatter()
         ym.dateFormat = "yyyy.MM"
         let mon = DateFormatter()

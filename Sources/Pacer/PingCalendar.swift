@@ -7,6 +7,7 @@ struct PingCalendar: View {
     let pings: [String: String] // "yyyy-MM-dd|HH:mm" -> "sent"/"failed"
     let holidays: Set<Date>     // skip_holidays 시 표시할 공휴일 (startOfDay). Cloud 모드면 빈 셋(매일 발사)
     let skipWeekends: Bool      // Local 모드에서 주말 스킵 시에만 true. Cloud 는 매일 발사라 false
+    var monthOffset: Int = 0    // 표시 월 (0=이번 달, -1=지난 달 …). 상태/판정은 실제 today 기준
 
     @AppStorage("pacerLang") private var lang = "en"
     private let cal = Calendar.current
@@ -18,9 +19,13 @@ struct PingCalendar: View {
 
     var body: some View {
         let today = Date()
-        let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: today))!
-        let dayCount = cal.range(of: .day, in: .month, for: today)!.count
+        let displayMonth = cal.date(byAdding: .month, value: monthOffset, to: today) ?? today
+        let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: displayMonth))!
+        let dayCount = cal.range(of: .day, in: .month, for: displayMonth)!.count
         let leading = cal.component(.weekday, from: monthStart) - 1 // 1=Sun
+        // 빈칸(leading) + 날짜를 하나의 [Int?] 배열로 — LazyVGrid 에서 빈칸 ForEach 와 날짜 ForEach 를 분리하면
+        // 셀 배치가 어긋나(1~6일 누락) 므로 단일 ForEach 로 그린다. nil = 앞 빈칸.
+        let slots: [Int?] = Array(repeating: nil, count: leading) + (1...dayCount).map { $0 }
 
         VStack(spacing: 6) {
             LazyVGrid(columns: columns, spacing: 9) {
@@ -28,9 +33,12 @@ struct PingCalendar: View {
                     Text(nm).font(.system(size: 10.5))
                         .foregroundStyle(i == 0 ? Color.pacerSunday.opacity(0.85) : i == 6 ? Color.pacerSaturday.opacity(0.85) : Color.secondary)
                 }
-                ForEach(0..<leading, id: \.self) { _ in Color.clear.frame(height: 1) }
-                ForEach(1...dayCount, id: \.self) { day in
-                    cell(day: day, monthStart: monthStart, today: today)
+                ForEach(Array(slots.enumerated()), id: \.offset) { _, day in
+                    if let day {
+                        cell(day: day, monthStart: monthStart, today: today)
+                    } else {
+                        Color.clear.frame(height: 1)
+                    }
                 }
             }
 
@@ -49,13 +57,17 @@ struct PingCalendar: View {
         let isOff = skipApplies && logged.isEmpty
         // 점 슬롯: 스킵 적용일이면 실제 로그된 것만, 아니면 설정 슬롯 ∪ 로그
         let slots = skipApplies ? logged.sorted() : Array(Set(pingTimes).union(logged)).sorted()
-        let isFuture = date > today && !cal.isDate(date, inSameDayAs: today)
+        let isToday = cal.isDate(date, inSameDayAs: today)
+        let isFuture = date > today && !isToday
         let dim = isOff || isFuture
 
         VStack(spacing: 5) {
+            // 오늘 = 보라 원 안 흰 숫자 (월 넘겨도 '오늘 위치'가 보여 기록 사라진 게 아님을 인지)
             Text("\(day)")
-                .font(.system(size: 14))
-                .foregroundStyle(Self.dayColor(weekday: cal.component(.weekday, from: date), dim: dim, holiday: isHoliday))
+                .font(.system(size: 14, weight: isToday ? .semibold : .regular))
+                .foregroundStyle(isToday ? .white : Self.dayColor(weekday: cal.component(.weekday, from: date), dim: dim, holiday: isHoliday))
+                .frame(width: 22, height: 22)
+                .background(isToday ? Color.pacerPurple : Color.clear, in: Circle())
             HStack(spacing: 4.5) {
                 if isOff {
                     Circle().fill(Color(white: 0.30)).frame(width: 4.5, height: 4.5)

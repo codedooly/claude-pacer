@@ -4,6 +4,7 @@ import SwiftUI
 struct UsageHeatmap: View {
     let history: [String: [String: Int]] // "yyyy-MM-dd" -> { slot: peak% }
     let pingTimes: [String]
+    var monthOffset: Int = 0    // 표시 월 (0=이번 달, -1=지난 달 …)
 
     @AppStorage("pacerLang") private var lang = "en"
     private let cal = Calendar.current
@@ -15,9 +16,12 @@ struct UsageHeatmap: View {
 
     var body: some View {
         let today = Date()
-        let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: today))!
-        let dayCount = cal.range(of: .day, in: .month, for: today)!.count
+        let displayMonth = cal.date(byAdding: .month, value: monthOffset, to: today) ?? today
+        let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: displayMonth))!
+        let dayCount = cal.range(of: .day, in: .month, for: displayMonth)!.count
         let leading = cal.component(.weekday, from: monthStart) - 1
+        // 빈칸(leading) + 날짜를 하나의 [Int?] 배열로 — 분리 ForEach 시 1~6일 누락되는 LazyVGrid 배치 오류 방지
+        let slots: [Int?] = Array(repeating: nil, count: leading) + (1...dayCount).map { $0 }
 
         VStack(spacing: 6) {
             LazyVGrid(columns: columns, spacing: 9) {
@@ -25,9 +29,12 @@ struct UsageHeatmap: View {
                     Text(nm).font(.system(size: 10.5))
                         .foregroundStyle(i == 0 ? Color.pacerSunday.opacity(0.85) : i == 6 ? Color.pacerSaturday.opacity(0.85) : Color.secondary)
                 }
-                ForEach(0..<leading, id: \.self) { _ in Color.clear.frame(height: 1) }
-                ForEach(1...dayCount, id: \.self) { day in
-                    cell(day: day, monthStart: monthStart, today: today)
+                ForEach(Array(slots.enumerated()), id: \.offset) { _, day in
+                    if let day {
+                        cell(day: day, monthStart: monthStart, today: today)
+                    } else {
+                        Color.clear.frame(height: 1)
+                    }
                 }
             }
 
@@ -38,15 +45,19 @@ struct UsageHeatmap: View {
     @ViewBuilder
     private func cell(day: Int, monthStart: Date, today: Date) -> some View {
         let date = cal.date(byAdding: .day, value: day - 1, to: monthStart)!
-        let future = date > today && !cal.isDate(date, inSameDayAs: today)
+        let isToday = cal.isDate(date, inSameDayAs: today)
+        let future = date > today && !isToday
         let slots = history[PingCalendar.dateStr(date)] ?? [:]
         // 그날 기록된 슬롯 ∪ 현재 핑 — 과거(핑 개수 다르던 시절) 데이터도 빠짐없이 표시
         let allSlots = Array(Set(pingTimes).union(slots.keys)).sorted()
 
         VStack(spacing: 5) {
+            // 오늘 = 보라 원 안 흰 숫자 (캘린더와 동일 표기)
             Text("\(day)")
-                .font(.system(size: 14))
-                .foregroundStyle(dayColor(weekday: cal.component(.weekday, from: date), future: future))
+                .font(.system(size: 14, weight: isToday ? .semibold : .regular))
+                .foregroundStyle(isToday ? .white : dayColor(weekday: cal.component(.weekday, from: date), future: future))
+                .frame(width: 22, height: 22)
+                .background(isToday ? Color.pacerPurple : Color.clear, in: Circle())
             HStack(spacing: 2) {
                 ForEach(allSlots, id: \.self) { slot in
                     RoundedRectangle(cornerRadius: 1.5)
@@ -55,6 +66,7 @@ struct UsageHeatmap: View {
                         .frame(height: 8)
                 }
             }
+            .frame(height: 10)   // PingCalendar 점 영역과 동일 높이 → 탭 전환 시 셀 높이 일치
         }
         .frame(maxWidth: .infinity, minHeight: 32)
     }
@@ -75,16 +87,17 @@ struct UsageHeatmap: View {
     private var legend: some View {
         HStack(spacing: 6) {
             ForEach(pingTimes, id: \.self) { slot in
-                Text(Self.slotLabel(slot, lang)).font(.system(size: 10.5)).foregroundStyle(.secondary)
+                Text(Self.slotLabel(slot, lang)).foregroundStyle(.secondary)
             }
             Spacer()
-            Text(tr(lang, "low", "낮음")).font(.system(size: 10.5)).foregroundStyle(.secondary)
+            Text(tr(lang, "low", "낮음")).foregroundStyle(.secondary)
             ForEach([0.3, 0.6, 0.95], id: \.self) { o in
                 RoundedRectangle(cornerRadius: 1.5).fill(Color.pacerPurple.opacity(o)).frame(width: 12, height: 8)
             }
-            Text(tr(lang, "full", "높음")).font(.system(size: 10.5)).foregroundStyle(.secondary)
+            Text(tr(lang, "full", "높음")).foregroundStyle(.secondary)
         }
-        .padding(.top, 4)
+        .font(.system(size: 11.5))   // PingCalendar 범례와 동일 폰트·패딩 → 탭 전환 시 높이 일치
+        .padding(.top, 6)
     }
 
     /// 슬롯 라벨 — 핑 시각의 시 (히트맵 막대가 핑 창과 1:1 매칭).
