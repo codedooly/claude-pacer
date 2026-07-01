@@ -88,17 +88,23 @@ final class DoctorModel: ObservableObject {
             actionLabel: tr(lang, "Sign in", "로그인"), action: { [usage] in Task { await usage.login() } })
     }
 
-    /// Node.js — claude 가 쓰는 PATH 에서 node 탐색 (없어도 핵심 동작엔 무방, 일부 플러그인·MCP 용).
+    /// Node.js — 시스템에 node 가 있는지 넓게 탐색 (claude PATH + 흔한 위치 + nvm 버전 디렉터리).
+    /// claude PATH 엔 없어도(-lc 라 .zshrc 의 nvm 미포함) 시스템엔 있을 수 있어 헷갈리지 않게 폭넓게 본다.
+    /// node 는 Pacer 핵심 동작엔 불필요(루틴은 --setting-sources 격리, claude 는 standalone) — 그래서 없어도 선택.
     private func nodeCheck() -> DoctorCheck {
-        let path = ClaudeCLI.env(for: PingRunner.claudePath())["PATH"] ?? ""
-        for dir in path.split(separator: ":") {
-            let c = String(dir) + "/node"
-            if FileManager.default.isExecutableFile(atPath: c) {
-                return DoctorCheck(id: "node", title: "Node.js", level: .ok, detail: c)
-            }
+        let fm = FileManager.default
+        var dirs = (ClaudeCLI.env(for: PingRunner.claudePath())["PATH"] ?? "").split(separator: ":").map(String.init)
+        dirs += [NSHomeDirectory() + "/.local/bin", "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"]
+        // nvm 버전 디렉터리 (최신 우선)
+        let nvm = NSHomeDirectory() + "/.nvm/versions/node"
+        if let vers = try? fm.contentsOfDirectory(atPath: nvm) {
+            dirs += vers.sorted().reversed().map { "\(nvm)/\($0)/bin" }
+        }
+        for d in dirs where fm.isExecutableFile(atPath: d + "/node") {
+            return DoctorCheck(id: "node", title: "Node.js", level: .ok, detail: d + "/node")
         }
         return DoctorCheck(id: "node", title: "Node.js", level: .warn,
-            detail: tr(lang, "Not in PATH (optional — some plugins/MCP need it)", "PATH 에 없음 (선택 — 일부 플러그인·MCP 용)"))
+            detail: tr(lang, "Not found (optional — some plugins/MCP need it)", "찾을 수 없음 (선택 — 일부 플러그인·MCP 용)"))
     }
 
     /// Pacer 버전 — 최신 릴리즈를 직접 확인(닥터 열 때마다). 새 버전 있으면 🟡 + 업데이트 버튼.

@@ -19,7 +19,8 @@ enum PacerDialog {
         window.appearance = NSAppearance(named: .darkAqua)
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
-        window.level = .floating   // 설정 창 등 일반 윈도우 위에 뜨도록 (뒤로 숨던 버그 수정)
+        window.level = .modalPanel   // 설정·닥터 등 일반 창 위에 확실히 (floating 으론 닥터 뒤로 숨던 문제)
+        window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]   // 현재 데스크탑 따라옴
         var done = false
         let finish: (Int) -> Void = { idx in
             guard !done else { return }; done = true
@@ -34,16 +35,22 @@ enum PacerDialog {
         // SwiftUI 콘텐츠 최종 크기로 윈도우를 맞춘 뒤 위치 계산 (center 가 초기 작은 rect 로 잡혀 모서리로 쏠리던 문제)
         host.view.layoutSubtreeIfNeeded()
         window.setContentSize(host.view.fittingSize)
-        if let parent, parent !== window {
-            // 설정 등 부모 윈도우 정중앙
-            let pf = parent.frame, wf = window.frame
-            window.setFrameOrigin(NSPoint(x: pf.midX - wf.width / 2, y: pf.midY - wf.height / 2))
+        // 현재 데스크탑 중앙 — 부모(설정·닥터)가 있으면 그 화면, 없으면 마우스가 있는 화면 기준
+        let anchorScreen = parent?.screen
+            ?? NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }
+            ?? NSScreen.main
+        if let vis = anchorScreen?.visibleFrame {
+            let wf = window.frame
+            // 중앙 상단 — 가로 중앙, 세로는 70% 지점(정중앙보다 위)
+            window.setFrameOrigin(NSPoint(x: vis.midX - wf.width / 2,
+                                          y: vis.minY + vis.height * 0.70 - wf.height / 2))
         } else {
             window.center()
         }
         windows.append(window)
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()   // 닥터·설정 위로 확실히 (뒤로 숨던 문제 fix)
     }
 }
 
