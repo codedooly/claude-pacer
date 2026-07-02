@@ -627,12 +627,39 @@ struct MenuContent: View {
                 modeChip
             }
 
-            HStack(spacing: 32) {
-                DonutGauge(pct: model.usage?.fiveHour?.pct ?? 0, label: tr(lang, "5-Hour", "5시간"), sub: Self.remaining(model.usage?.fiveHour?.resetsAt, lang))
-                DonutGauge(pct: model.usage?.sevenDay?.pct ?? 0, label: tr(lang, "7-Day", "7일"), sub: Self.remaining(model.usage?.sevenDay?.resetsAt, lang))
+            gaugeRow
+                // plan/모드 라인 ↔ 도넛 사이 공간
+                .padding(.top, 10)
+        }
+    }
+
+    /// 사용량 게이지 행 — 세션(5h) + 주간 전체 + 주간 모델별(Fable 등).
+    /// scoped 는 API limits 기반이라 모델이 늘면(예: Opus 전용 통) 도넛이 자동으로 하나 더 붙는다.
+    private var gaugeRow: some View {
+        var scoped = model.usage?.weeklyScoped ?? []
+        #if PACER_DEBUG
+        // 디자인 미리보기 — Fable 채워진 상태 확인용(실제 쿼터 소모 0). 릴리즈 빌드엔 미포함
+        if scoped.first(where: { $0.pct > 0 }) == nil {
+            scoped = [ScopedLimit(name: "Fable", pct: 45, resetsAt: Date().addingTimeInterval(3 * 86400 + 5 * 3600))]
+        }
+        #endif
+        let compact = !scoped.isEmpty          // 3개+ 이면 도넛 축소·간격 확보
+        let size: CGFloat = compact ? 80 : 96
+        // 정체성 점(옵션2) — 채움 임계값과 안 겹치는 톤. 세션=블루, 주간전체=그린, 모델별=앰버/…
+        let a5h = Color(red: 0.39, green: 0.78, blue: 0.98)
+        let a7d = Color(red: 0.40, green: 0.85, blue: 0.60)
+        let scopedAccents: [Color] = [Color(red: 1.0, green: 0.72, blue: 0.30), Color(red: 0.95, green: 0.55, blue: 0.78)]
+        return HStack(spacing: compact ? 16 : 32) {
+            DonutGauge(pct: model.usage?.fiveHour?.pct ?? 0, label: tr(lang, "5-Hour", "5시간"),
+                       sub: Self.remaining(model.usage?.fiveHour?.resetsAt, lang), size: size, accent: a5h)
+            DonutGauge(pct: model.usage?.sevenDay?.pct ?? 0, label: tr(lang, "7-Day", "7일"),
+                       sub: Self.remaining(model.usage?.sevenDay?.resetsAt, lang), size: size, accent: a7d)
+            // 주간 모델별(Fable 등) — 미사용(resetsAt nil)이면 카운트다운 대신 "미사용"
+            ForEach(Array(scoped.enumerated()), id: \.offset) { i, s in
+                DonutGauge(pct: s.pct, label: s.name,
+                           sub: (s.pct == 0 && s.resetsAt == nil) ? tr(lang, "unused", "미사용") : Self.remaining(s.resetsAt, lang),
+                           size: size, accent: scopedAccents[i % scopedAccents.count])
             }
-            // plan/모드 라인 ↔ 도넛 사이 공간
-            .padding(.top, 10)
         }
     }
 

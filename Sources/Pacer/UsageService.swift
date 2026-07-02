@@ -6,10 +6,18 @@ struct UsageWindow {
     let resetsAt: Date?
 }
 
+/// 주간 모델별(scoped) 한도 한 칸 — 예: Fable 전용 주간 쿼터. (API limits[].weekly_scoped)
+struct ScopedLimit {
+    let name: String    // 모델 표시명 (API scope.model.display_name — 예: "Fable")
+    let pct: Int
+    let resetsAt: Date? // 미사용이면 null
+}
+
 /// usage API 응답 정규화 결과.
 struct Usage {
     let fiveHour: UsageWindow?
     let sevenDay: UsageWindow?
+    let weeklyScoped: [ScopedLimit]   // 주간 모델별 한도(Fable 등). limits 배열 기반 — 모델 늘면 자동 반영
 }
 
 enum UsageError: Error, CustomStringConvertible {
@@ -96,18 +104,38 @@ struct UsageService {
         }
     }
 
-    /// API 응답 → {five_hour, seven_day}.
+    /// API 응답 → {five_hour, seven_day, weeklyScoped}.
+    /// 세션·주간은 데스크탑 앱과 동일하게 `limits` 배열을 우선 사용(값 불일치 방지), 없으면 구 top-level 필드로 폴백.
     static func parse(_ obj: [String: Any]) -> Usage {
-        func window(_ key: String) -> UsageWindow? {
+        let limits = obj["limits"] as? [[String: Any]] ?? []
+
+        // limits 배열에서 kind 로 창 찾기 (percent·resets_at) — 데스크탑 앱과 같은 소스
+        func limitWindow(_ kind: String) -> UsageWindow? {
+            guard let l = limits.first(where: { ($0["kind"] as? String) == kind }) else { return nil }
+            let pct = (l["percent"] as? NSNumber)?.intValue ?? 0
+            return UsageWindow(pct: pct, resetsAt: parseReset(l["resets_at"]))
+        }
+        // 구 top-level 필드(five_hour/seven_day) — limits 없을 때만 폴백
+        func legacyWindow(_ key: String) -> UsageWindow? {
             guard
                 let w = obj[key] as? [String: Any],
                 let util = w["utilization"] as? NSNumber
             else { return nil }
             return UsageWindow(pct: Int(util.doubleValue.rounded()), resetsAt: parseReset(w["resets_at"]))
         }
+
+        // 주간 모델별 scoped 한도(Fable 등) — limits 배열에서 추출. 모델명은 응답에 박혀 나옴(하드코딩 X)
+        var scoped: [ScopedLimit] = []
+        for l in limits where (l["kind"] as? String) == "weekly_scoped" {
+            let name = ((l["scope"] as? [String: Any])?["model"] as? [String: Any])?["display_name"] as? String
+            let pct = (l["percent"] as? NSNumber)?.intValue ?? 0
+            scoped.append(ScopedLimit(name: name ?? "Model", pct: pct, resetsAt: parseReset(l["resets_at"])))
+        }
+
         return Usage(
-            fiveHour: window("five_hour"),
-            sevenDay: window("seven_day")
+            fiveHour: limitWindow("session") ?? legacyWindow("five_hour"),
+            sevenDay: limitWindow("weekly_all") ?? legacyWindow("seven_day"),
+            weeklyScoped: scoped
         )
     }
 

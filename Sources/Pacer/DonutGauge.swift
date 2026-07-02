@@ -29,25 +29,33 @@ struct DonutGauge: View {
     let pct: Int
     let label: String
     let sub: String
+    var size: CGFloat = 96   // 링 지름 (게이지 2개=96, 3개+=축소). 링 두께·숫자 폰트는 이에 비례
+    var accent: Color? = nil // 라벨 옆 구분 점(게이지 정체성). 채움색은 임계값 유지
 
     private var clamped: CGFloat { CGFloat(min(max(pct, 0), 100)) / 100 }
+    private var line: CGFloat { size / 9.6 }       // 96 → 10
+    private var pctFont: CGFloat { size * 0.26 }    // 96 → 25
 
     var body: some View {
         VStack(spacing: 14) {
-            Text(label).font(.system(size: 14, weight: .semibold))   // 라벨을 도넛 위로
+            // 라벨(도넛 위) + 정체성 점 (있을 때만)
+            HStack(spacing: 5) {
+                if let accent { Circle().fill(accent).frame(width: 6, height: 6) }
+                Text(label).font(.system(size: 14, weight: .semibold))
+            }
             ZStack {
                 Circle()
-                    .stroke(Color.pacerTrack, lineWidth: 10)
+                    .stroke(Color.pacerTrack, lineWidth: line)
                 Circle()
                     .trim(from: 0, to: clamped)
-                    .stroke(Color.pacerThreshold(pct), style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                    .stroke(Color.pacerThreshold(pct), style: StrokeStyle(lineWidth: line, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                 HStack(alignment: .firstTextBaseline, spacing: 1) {
-                    Text("\(pct)").font(.system(size: 25, weight: .semibold))
+                    Text("\(pct)").font(.system(size: pctFont, weight: .semibold))
                     Text("%").font(.system(size: 12)).foregroundStyle(.secondary)
                 }
             }
-            .frame(width: 96, height: 96)
+            .frame(width: size, height: size)
             // 리셋까지 남은 시간 — 도넛 아래 단독 (시계 아이콘으로 시선 유도)
             HStack(spacing: 3) {
                 Image(systemName: "clock")
