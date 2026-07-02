@@ -438,6 +438,7 @@ final class UsageModel: ObservableObject {
 
     private let service = UsageService()
     private var lastFetch: Date?
+    private var resettingRetries = 0   // 리셋 경계 stale 시 자동 재조회 횟수 (무한 루프 방지, 최대 3)
     private var pollTimer: Timer?
     private var updateTimer: Timer?
 
@@ -473,6 +474,17 @@ final class UsageModel: ObservableObject {
         }
     }
 
+    /// resets_at 이 과거인 창이 하나라도 있으면 true — 리셋 경계 순간(API 가 1~2분간 stale) 감지용.
+    /// scoped(Fable 등)의 resets_at nil(미사용)은 resetting 아님.
+    static func isResetting(_ u: Usage) -> Bool {
+        func past(_ w: UsageWindow?) -> Bool {
+            guard let r = w?.resetsAt else { return false }
+            return r.timeIntervalSinceNow <= 0
+        }
+        if past(u.fiveHour) || past(u.sevenDay) { return true }
+        return u.weeklyScoped.contains { ($0.resetsAt?.timeIntervalSinceNow ?? 1) <= 0 }
+    }
+
     func refresh(force: Bool = false) async {
         // Keychain(security 서브프로세스)을 refresh 당 1회만 읽어 authed·plan·fetch 로 전달
         let oauth = service.oauthDict()
@@ -502,6 +514,19 @@ final class UsageModel: ObservableObject {
                 UsageHistory.record(pct: fh.pct, resetsAt: fh.resetsAt, pingTimes: pingTimes)
                 // Cloud 모드: 창 시작 역산 → 핑 슬롯 근처면 Pace log 에 auto 기록
                 if pingMode == "cloud", let r = fh.resetsAt { recordAutoPing(resetsAt: r) }
+            }
+            // 리셋 경계 순간: resets_at 이 과거(=resetting)면 API 가 1~2분간 stale.
+            // 사용자가 아무것도 안 해도 매끄럽게 정상화되도록 45초 뒤 자동 재조회(최대 3회). 정상화되면 카운터 리셋.
+            if Self.isResetting(u) {
+                if resettingRetries < 3 {
+                    resettingRetries += 1
+                    Task { [weak self] in
+                        try? await Task.sleep(nanoseconds: 45_000_000_000)
+                        await self?.refresh(force: true)
+                    }
+                }
+            } else {
+                resettingRetries = 0
             }
         case .failure(let e):
             error = e.description
