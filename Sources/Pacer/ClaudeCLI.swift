@@ -49,6 +49,24 @@ enum ClaudeCLI {
         return String(r.output[m])
     }
 
+    /// 플래그 지원 캐시 — claudePath 별 `--help` 결과 (앱 실행 동안 유지. 재설치 시 앱 재시작이면 충분)
+    private static var helpCache: [String: String] = [:]
+
+    /// 현재 claude 가 특정 플래그를 지원하는지 — `--help` 출력에서 검색 (구버전 CLI 방어용).
+    /// jisu 케이스: 1.0.65 는 --setting-sources 미지원 → 애매한 실패 대신 명확한 업데이트 안내를 위해 사전 감지.
+    /// @param flag 예: "--setting-sources"
+    /// @returns 지원 true / 미지원 false. --help 자체 실패(출력 없음)면 true(가드 통과 — 오탐으로 기능 차단 방지)
+    static func supportsFlag(_ flag: String) async -> Bool {
+        let path = PingRunner.claudePath()
+        if helpCache[path] == nil {
+            let r = await run(executable: path, args: ["--help"], env: env(for: path), timeout: 15)
+            helpCache[path] = r.output
+        }
+        let help = helpCache[path] ?? ""
+        guard !help.isEmpty else { return true }
+        return help.contains(flag)
+    }
+
     /// PATH·알려진 위치에서 발견되는 모든 claude 경로 (which -a 격) — 다중 설치 감지용.
     /// 첫 항목이 실제로 Pacer 가 쓰는 것(PingRunner.claudePath 와 동일 순서).
     static func allClaudePaths() -> [String] {

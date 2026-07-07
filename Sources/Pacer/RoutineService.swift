@@ -20,6 +20,10 @@ enum RoutineService {
     /// @param env    (선택) 사용자가 `/schedule` 에서 복사한 env_id — 환경 자동탐지 실패(no_env) 대비
     /// @returns 파싱된 PaceResult (실패 시 nil)
     static func run(_ action: String, times: [String] = [], env: String = "") async -> PaceResult? {
+        // 구버전 CLI 방어 — --setting-sources 미지원(예: 1.0.65)이면 애매한 실패 대신 명확한 업데이트 안내
+        guard await ClaudeCLI.supportsFlag("--setting-sources") else {
+            return PaceResult(ok: false, id: "", enabled: false, nextRunAt: nil, cron: "", reason: "old_cli", errorDetail: nil)
+        }
         // 번들 스킬 지침을 명령형으로 감싸 직접 실행 (글로벌 설치·슬래시커맨드 의존 제거 — 결정적 동작)
         guard let skillURL = Bundle.main.url(forResource: "PaceScheduleSkill", withExtension: "md"),
               let raw = try? String(contentsOf: skillURL, encoding: .utf8) else { return nil }

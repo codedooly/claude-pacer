@@ -421,6 +421,11 @@ struct SettingsView: View {
             syncError = tr(lang,
                 "No cloud environment found. Create one at claude.ai/code, then retry — or paste your env_… below.",
                 "클라우드 환경이 없습니다. claude.ai/code 에서 환경을 만든 뒤 다시 시도하거나, /schedule 의 env_… 를 아래에 붙여넣으세요.")
+        } else if r?.reason == "old_cli" {
+            // 구버전 CLI (--setting-sources 미지원, 예: 1.0.65) — 업데이트 안내
+            syncError = tr(lang,
+                "Your Claude Code is too old for Cloud mode. Update it (e.g. `claude update` in Terminal), then retry.",
+                "Claude Code 버전이 낮아 Cloud 모드를 쓸 수 없습니다. 터미널에서 `claude update` 로 업데이트 후 다시 시도하세요.")
         } else {
             // 그 외 실패 → 실제 에러(404 등)를 Pacer 다이얼로그로 노출해 사용자가 접수 가능하게
             let detail = r?.errorDetail ?? syncError ?? "unknown"
