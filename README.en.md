@@ -10,6 +10,9 @@
 
 *Stay in rhythm within your limits* — for Claude Pro / Max
 
+Track your Claude usage limits — **5-hour window, weekly quota, and per-model limits** — live from the menu bar,
+and align fresh 5-hour windows to your core hours with scheduled pings.
+
 ![platform](https://img.shields.io/badge/platform-macOS%2014+-1c1c1e?style=flat-square)
 &nbsp;![license](https://img.shields.io/badge/license-MIT-7C3AED?style=flat-square)
 &nbsp;![swift](https://img.shields.io/badge/Swift-SwiftUI-orange?style=flat-square)

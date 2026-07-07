@@ -10,6 +10,9 @@
 
 *한도 안에서 리듬을 유지하세요* — Claude Pro / Max 용
 
+Claude 사용량 한도(usage limit) — **5시간 창 · 주간 쿼터 · 모델별 한도** — 를 메뉴바에서 실시간 추적하고,
+예약 핑으로 5시간 창을 코어 업무 시간에 정렬합니다.
+
 ![platform](https://img.shields.io/badge/platform-macOS%2014+-1c1c1e?style=flat-square)
 &nbsp;![license](https://img.shields.io/badge/license-MIT-7C3AED?style=flat-square)
 &nbsp;![swift](https://img.shields.io/badge/Swift-SwiftUI-orange?style=flat-square)
