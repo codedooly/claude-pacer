@@ -18,8 +18,9 @@ enum RoutineService {
     /// @param action register | disable | enable | status
     /// @param times  register 시 핑 시각 ["08:00", ...] (그 외 무시)
     /// @param env    (선택) 사용자가 `/schedule` 에서 복사한 env_id — 환경 자동탐지 실패(no_env) 대비
+    /// @param model  (선택) routine 발화 모델 — Fable 트래킹 시 "claude-fable-5". 빈 값이면 기본(haiku)
     /// @returns 파싱된 PaceResult (실패 시 nil)
-    static func run(_ action: String, times: [String] = [], env: String = "") async -> PaceResult? {
+    static func run(_ action: String, times: [String] = [], env: String = "", model: String = "") async -> PaceResult? {
         // 구버전 CLI 방어 — --setting-sources 미지원(예: 1.0.65)이면 애매한 실패 대신 명확한 업데이트 안내
         guard await ClaudeCLI.supportsFlag("--setting-sources") else {
             return PaceResult(ok: false, id: "", enabled: false, nextRunAt: nil, cron: "", reason: "old_cli", errorDetail: nil)
@@ -33,7 +34,8 @@ enum RoutineService {
             body = String(body[end.upperBound...])
         }
         let timesArg = times.isEmpty ? "" : times.sorted().joined(separator: ",")
-        let argLine = (["ARGUMENTS:", action, timesArg, env].filter { !$0.isEmpty }).joined(separator: " ")
+        let modelArg = model.isEmpty ? "" : "model=\(model)"   // 위치 무관 접두 토큰 (스킬 ARGUMENTS 파싱 참조)
+        let argLine = (["ARGUMENTS:", action, timesArg, env, modelArg].filter { !$0.isEmpty }).joined(separator: " ")
         let prompt = """
         아래 [지침]을 지금 실제로 실행하라. 지침을 요약·복창하지 말 것. 명시된 도구(RemoteTrigger)를 실제 호출해 작업을 수행하고, 반드시 마지막 줄에 PACE_RESULT 한 줄을 출력하라.
 

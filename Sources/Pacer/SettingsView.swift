@@ -6,6 +6,7 @@ struct SettingsView: View {
     @State private var hours: [Int]
     @State private var skipWeekends: Bool
     @State private var skipHolidays: Bool
+    @State private var fableTrack: Bool   // Fable 트래킹 — 핑을 Fable 모델로(주간 창 정렬) + 게이지 상시 표시
     @State private var mode: String   // "local"(launchd) | "cloud"(routine)
     @State private var initialMode: String   // 열었을 때 모드 (Done 시 변경 감지 → routine 1회 sync)
     @State private var window: NSWindow?
@@ -25,6 +26,7 @@ struct SettingsView: View {
         _hours = State(initialValue: c.pingTimes.map { Int($0.split(separator: ":").first ?? "0") ?? 0 })
         _skipWeekends = State(initialValue: c.skipWeekends)
         _skipHolidays = State(initialValue: c.skipHolidays)
+        _fableTrack = State(initialValue: c.fableOn)
         _mode = State(initialValue: c.mode)
         _initialMode = State(initialValue: c.mode)
     }
@@ -178,6 +180,15 @@ struct SettingsView: View {
                 }
             }
 
+            // Fable 트래킹 — 핑을 Fable 모델로(주간 창을 예약 시각에 열어 리셋 정렬·인지) + 게이지 상시 표시
+            Section {
+                Toggle(tr(lang, "Fable tracking", "Fable 트래킹"), isOn: $fableTrack).tint(.pacerPurple)
+            } footer: {
+                Text(tr(lang,
+                        "On = pings fire with the Fable model, so the Fable weekly window opens on your schedule (gauge always shown). Off = default model; the gauge shows only while a Fable window is active. Falls back automatically if Fable isn't available on your plan.",
+                        "켜면 핑을 Fable 모델로 발사해 Fable 주간 창도 예약 시각에 열립니다 (게이지 상시 표시). 끄면 기본 모델로 발사하고, 게이지는 Fable 창이 활성일 때만 표시됩니다. 플랜에서 Fable 을 못 쓰면 자동으로 기본 모델로 폴백합니다."))
+            }
+
             // 주말·공휴일 스킵 — Local 은 토글, Cloud 는 매일 발화 안내 (같은 위치)
             if mode == "local" {
                 Section {
@@ -274,6 +285,11 @@ struct SettingsView: View {
         .onChange(of: hours) { normalizeHours(); save(mode: initialMode) }
         .onChange(of: skipWeekends) { save(mode: initialMode) }
         .onChange(of: skipHolidays) { save(mode: initialMode) }
+        // Fable 트래킹 — 저장 + Cloud 등록 상태면 routine 모델 즉시 재등록 (Local 은 다음 핑부터 자동 반영)
+        .onChange(of: fableTrack) {
+            save(mode: initialMode)
+            if initialMode == "cloud", !routineTimes.isEmpty { Task { await registerRoutine() } }
+        }
         // mode 는 Done 시에만 확정 저장 — X 닫기로 종료하면 기존 모드 유지
         .onChange(of: launchAtLogin) { setLaunchAtLogin(launchAtLogin) }
         // 동기화 중엔 창 닫기 버튼 비활성 (작업 중단·중복 방지)
@@ -285,6 +301,7 @@ struct SettingsView: View {
             hours = c.pingTimes.map { Int($0.split(separator: ":").first ?? "0") ?? 0 }
             skipWeekends = c.skipWeekends
             skipHolidays = c.skipHolidays
+            fableTrack = c.fableOn
             mode = c.mode
             initialMode = c.mode
         }
@@ -400,12 +417,14 @@ struct SettingsView: View {
         let times = hours.sorted().map { String(format: "%02d:00", $0) }
         // cloudEnvId 비어있으면 빈 문자열 → 스킬이 환경 자동탐지. 있으면 그 env 로 최우선 등록.
         let envTrimmed = cloudEnvId.trimmingCharacters(in: .whitespaces)
-        var r = await RoutineService.run("register", times: times, env: envTrimmed)
+        // Fable 트래킹 ON → routine 발화 모델을 Fable 로 (주간 창도 예약 시각에 열림)
+        let pingModel = fableTrack ? "claude-fable-5" : ""
+        var r = await RoutineService.run("register", times: times, env: envTrimmed, model: pingModel)
         // 신규 계정(trigger 0개) no_env + env 미입력 → /schedule 로 env_id 자동취득 후 재등록 (~20초 추가)
         if r?.reason == "no_env", envTrimmed.isEmpty {
             if let env = await RoutineService.fetchEnvId() {
                 cloudEnvId = env                                  // 저장 → 다음부턴 바로 사용
-                r = await RoutineService.run("register", times: times, env: env)
+                r = await RoutineService.run("register", times: times, env: env, model: pingModel)
             }
         }
         let ok = r?.ok ?? false
@@ -545,6 +564,7 @@ struct SettingsView: View {
         hours = d.pingTimes.map { Int($0.split(separator: ":").first ?? "0") ?? 0 }
         skipWeekends = d.skipWeekends
         skipHolidays = d.skipHolidays
+        fableTrack = d.fableOn
         save(mode: initialMode)
     }
 
@@ -556,6 +576,7 @@ struct SettingsView: View {
         cfg.pingTimes = times
         cfg.skipWeekends = skipWeekends
         cfg.skipHolidays = skipHolidays
+        cfg.fablePing = fableTrack
         cfg.pingMode = m
         cfg.save()
         if m == "cloud" {

@@ -64,6 +64,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         cancellable = model.objectWillChange.sink { [weak self] _ in
             DispatchQueue.main.async { self?.updateTitle() }
         }
+
+        // 새 기능 1회 안내 — Fable 트래킹 (설정에 토글만 추가되면 존재를 모르므로 첫 실행에 한 번 안내)
+        showFableIntroOnce()
+    }
+
+    /// Fable 트래킹 1회성 안내 팝업 — 로그인 완료 사용자에게만, 평생 1회. [설정 열기]로 토글 위치까지 연결.
+    private func showFableIntroOnce() {
+        let key = "fableIntroShown"
+        guard !UserDefaults.standard.bool(forKey: key), Config.load().authPassed == true else { return }
+        let lang = UserDefaults.standard.string(forKey: "pacerLang") ?? "en"
+        // 앱 초기화(팝오버·게이지)와 겹치지 않게 잠깐 뒤에
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            UserDefaults.standard.set(true, forKey: key)
+            PacerDialog.show(
+                title: tr(lang, "New: Fable tracking", "새 기능: Fable 트래킹"),
+                message: tr(lang,
+                    "Fable now has its own weekly quota. Turn on “Fable tracking” in Settings — pings will open the Fable weekly window on schedule and keep its gauge visible. (Cloud routine updates automatically when you toggle it.)",
+                    "Fable 에 전용 주간 쿼터가 생겼어요. 설정에서 “Fable 트래킹”을 켜면 핑이 Fable 주간 창을 예약 시각에 열고 게이지도 상시 표시됩니다. (켜는 순간 클라우드 루틴도 자동 갱신)"),
+                buttons: [(tr(lang, "Later", "나중에"), false),
+                          (tr(lang, "Open Settings", "설정 열기"), true)]) { [weak self] idx in
+                if idx == 1 { self?.openSettings() }
+            }
+        }
     }
 
     private func updateTitle() {
@@ -661,10 +684,12 @@ struct MenuContent: View {
     /// 사용량 게이지 행 — 세션(5h) + 주간 전체 + 주간 모델별(Fable 등).
     /// scoped 는 API limits 기반이라 모델이 늘면(예: Opus 전용 통) 도넛이 자동으로 하나 더 붙는다.
     private var gaugeRow: some View {
-        var scoped = model.usage?.weeklyScoped ?? []
+        // 표시 규칙: 트래킹 ON = 상시 표시 / OFF = Fable 창이 활성(사용량 또는 카운트다운)일 때만 — 미사용 상시 도넛 방지
+        let fableOn = Config.load().fableOn
+        var scoped = (model.usage?.weeklyScoped ?? []).filter { fableOn || $0.pct > 0 || $0.resetsAt != nil }
         #if PACER_DEBUG
-        // 디자인 미리보기 — Fable 채워진 상태 확인용(실제 쿼터 소모 0). 릴리즈 빌드엔 미포함
-        if scoped.first(where: { $0.pct > 0 }) == nil {
+        // 디자인 미리보기 — 트래킹 ON + 실데이터 없음일 때만 45% 목업 (실제 쿼터 소모 0). 릴리즈 빌드엔 미포함
+        if fableOn, scoped.first(where: { $0.pct > 0 }) == nil {
             scoped = [ScopedLimit(name: "Fable", pct: 45, resetsAt: Date().addingTimeInterval(3 * 86400 + 5 * 3600))]
         }
         #endif

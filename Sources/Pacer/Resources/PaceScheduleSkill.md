@@ -11,12 +11,14 @@ Pacer 의 워밍 routine(`pace-window-warm`)을 `RemoteTrigger`(claude.ai code t
 ## ARGUMENTS 파싱
 
 `ARGUMENTS` 의 첫 토큰 = **action**, 둘째 토큰(있으면) = **핑 시각 CSV**, 셋째 토큰(있으면) = **env_id**(선택).
+추가로 위치와 무관하게 `model=` 접두 토큰이 있으면 **핑 모델 지정**(선택)으로 해석한다.
 
 | 토큰 | 의미 |
 |------|------|
 | 1번 = action | `register` / `disable` / `enable` / `status` |
 | 2번 = 핑 시각 CSV | `register` 시 `08:00,13:00,18:00` 형식. 없으면 기본값 |
 | 3번 = env_id | (선택) 사용자가 `/schedule` 에서 복사한 환경ID. 있으면 환경 자동탐지보다 **최우선** 사용 |
+| `model=<모델ID>` | (선택, 위치 무관) routine 의 `session_context.model` 로 쓸 모델. 없으면 `claude-haiku-4-5-20251001` |
 
 | action | 의미 |
 |--------|------|
@@ -91,7 +93,7 @@ auth 는 in-process — curl 쓰지 말 것.
   "job_config": {
     "ccr": {
       "environment_id": "<env>",
-      "session_context": { "model": "claude-haiku-4-5-20251001", "allowed_tools": [] },
+      "session_context": { "model": "<모델ID — ARGUMENTS 의 model= 값, 없으면 claude-haiku-4-5-20251001>", "allowed_tools": [] },
       "events": [
         { "data": {
             "uuid": "<생성한 uuid>",
