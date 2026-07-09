@@ -701,14 +701,24 @@ struct MenuContent: View {
         let scopedAccents: [Color] = [Color(red: 1.0, green: 0.72, blue: 0.30), Color(red: 0.95, green: 0.55, blue: 0.78)]
         return HStack(spacing: compact ? 16 : 32) {
             DonutGauge(pct: model.usage?.fiveHour?.pct ?? 0, label: tr(lang, "5-Hour", "5시간"),
-                       sub: Self.remaining(model.usage?.fiveHour?.resetsAt, lang), size: size, accent: a5h)
+                       sub: Self.remaining(model.usage?.fiveHour?.resetsAt, lang), size: size, accent: a5h,
+                       help: tr(lang, "5-hour session window — shared across all models", "5시간 세션 창 — 모든 모델 공용"))
             DonutGauge(pct: model.usage?.sevenDay?.pct ?? 0, label: tr(lang, "7-Day", "7일"),
-                       sub: Self.remaining(model.usage?.sevenDay?.resetsAt, lang), size: size, accent: a7d)
-            // 주간 모델별(Fable 등) — 미사용(resetsAt nil)이면 카운트다운 대신 "미사용"
+                       sub: Self.remaining(model.usage?.sevenDay?.resetsAt, lang), size: size, accent: a7d,
+                       help: tr(lang, "Weekly limit — all models combined", "주간 한도 — 모든 모델 합산"))
+            // 주간 모델별(Fable 등) — 미사용(resetsAt nil)이면 "미사용".
+            // 트래킹 OFF 인데 사용량이 잡히면(CLI 직접 사용) 빨간 테두리 점 — 호버 설명으로 트래킹 ON 유도
             ForEach(Array(scoped.enumerated()), id: \.offset) { i, s in
                 DonutGauge(pct: s.pct, label: s.name,
                            sub: (s.pct == 0 && s.resetsAt == nil) ? tr(lang, "unused", "미사용") : Self.remaining(s.resetsAt, lang),
-                           size: size, accent: scopedAccents[i % scopedAccents.count])
+                           size: size,
+                           accent: fableOn ? scopedAccents[i % scopedAccents.count] : Color.pacerRed,
+                           accentHollow: !fableOn,
+                           help: fableOn
+                               ? tr(lang, "\(s.name) weekly window — Pacer pings keep it opening on schedule",
+                                          "\(s.name) 주간 창 — 핑이 예약 시각에 창을 열어 정렬 중")
+                               : tr(lang, "\(s.name) usage detected, but tracking is off — turn on “Fable tracking” in Settings so pings open the weekly window on schedule",
+                                          "\(s.name) 사용량이 잡혔지만 트래킹은 꺼져 있어요 — 설정에서 “Fable 트래킹”을 켜면 핑이 주간 창을 예약 시각에 열어줍니다"))
             }
         }
     }
