@@ -82,16 +82,26 @@ struct UsageService {
         return nil
     }
 
+    /// usage 전용 세션 — 캐시 완전 비활성. API 가 Cache-Control 을 안 줘서 URLSession 휴리스틱 캐시가
+    /// 낡은 응답을 재사용했음 (새로고침해도 몇 시간 전 값 + 전부 "리셋 중", 재시작해야 복구되던 버그).
+    private static let session: URLSession = {
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.urlCache = nil
+        cfg.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        return URLSession(configuration: cfg)
+    }()
+
     /// usage API 호출 → 정규화된 Usage.
     func fetch(from dict: [String: Any]? = nil) async -> Result<Usage, UsageError> {
         guard let tok = token(from: dict) else { return .failure(.noToken) }
 
         var req = URLRequest(url: Self.usageURL)
+        req.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
         req.setValue("Bearer \(tok)", forHTTPHeaderField: "Authorization")
         req.setValue(Self.oauthBeta, forHTTPHeaderField: "anthropic-beta")
 
         do {
-            let (data, resp) = try await URLSession.shared.data(for: req)
+            let (data, resp) = try await Self.session.data(for: req)
             if let http = resp as? HTTPURLResponse, http.statusCode != 200 {
                 return .failure(.http(http.statusCode))
             }
