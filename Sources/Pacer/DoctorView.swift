@@ -112,6 +112,8 @@ final class DoctorModel: ObservableObject {
         let ver = Updater.currentVersion()
         let latest = await Updater.latestVersion()
         if let latest, Updater.isNewer(latest, than: ver) {
+            // 메인 화면에도 동기화 — 닥터는 아는데 팝오버 배너·아이콘 점은 24h 타이머를 기다리던 불일치 제거
+            usage.availableUpdate = latest
             return DoctorCheck(id: "version", title: tr(lang, "Pacer version", "Pacer 버전"), level: .warn,
                 detail: tr(lang, "\(ver) — update \(latest) available", "\(ver) — 새 버전 \(latest) 있음"),
                 actionLabel: tr(lang, "Update", "업데이트"), action: { Updater.runUpdate(latest: latest) })

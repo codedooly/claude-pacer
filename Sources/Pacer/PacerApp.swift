@@ -348,6 +348,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // 팝오버 창을 key 로 — 세그먼트 탭 등 컨트롤이 활성색(회색 아님)으로 그려지도록
             popover.contentViewController?.view.window?.makeKey()
             model.popoverOpenNonce += 1   // 캘린더를 이번 달로 리셋 (재사용 뷰라 onDisappear 미발화 대비)
+            model.checkUpdateIfStale()    // 6시간 지났으면 새 버전 확인 — 실행 직후 나온 릴리즈도 곧 배너로
             Task { await model.refresh() }
         }
     }
@@ -489,12 +490,21 @@ final class UsageModel: ObservableObject {
 
     /// 최신 릴리즈 확인 → 현재보다 새 버전이면 availableUpdate 설정 (배너·아이콘 점 표시).
     func checkUpdate() async {
+        lastUpdateCheck = Date()
         let cur = Updater.currentVersion()
         if let latest = await Updater.latestVersion(), Updater.isNewer(latest, than: cur) {
             availableUpdate = latest
         } else {
             availableUpdate = nil
         }
+    }
+
+    private var lastUpdateCheck: Date?
+
+    /// 팝오버 열 때 호출 — 마지막 확인이 6시간 이상 지났으면 재확인 (실행 직후 나온 릴리즈도 24h 타이머 전에 배너 노출).
+    func checkUpdateIfStale() {
+        guard Date().timeIntervalSince(lastUpdateCheck ?? .distantPast) > 6 * 3600 else { return }
+        Task { await checkUpdate() }
     }
 
     /// resets_at 이 과거인 창이 하나라도 있으면 true — 리셋 경계 순간(API 가 1~2분간 stale) 감지용.
