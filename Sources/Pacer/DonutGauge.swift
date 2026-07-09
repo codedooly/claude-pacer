@@ -32,7 +32,7 @@ struct DonutGauge: View {
     var size: CGFloat = 96   // 링 지름 (게이지 2개=96, 3개+=축소). 링 두께·숫자 폰트는 이에 비례
     var accent: Color? = nil // 라벨 옆 구분 점(게이지 정체성). 채움색은 임계값 유지
     var accentHollow = false // 점을 테두리만 — 패시브 관찰 표시 (예: Fable 트래킹 꺼짐 + 사용량 감지)
-    var help: String? = nil  // 라벨 호버 툴팁 — 게이지 의미 설명 (빈 점 궁금증 → 트래킹 유도)
+    var onHover: ((Bool) -> Void)? = nil // 라벨(점+텍스트) 호버 — 부모가 테마 말풍선 표시에 사용
 
     private var clamped: CGFloat { CGFloat(min(max(pct, 0), 100)) / 100 }
     private var line: CGFloat { size / 9.6 }       // 96 → 10
@@ -51,7 +51,8 @@ struct DonutGauge: View {
                 }
                 Text(label).font(.system(size: 14, weight: .semibold))
             }
-            .help(help ?? "")
+            .contentShape(Rectangle())
+            .onHover { onHover?($0) }
             ZStack {
                 Circle()
                     .stroke(Color.pacerTrack, lineWidth: line)

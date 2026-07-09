@@ -80,8 +80,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             PacerDialog.show(
                 title: tr(lang, "New: Fable tracking", "새 기능: Fable 트래킹"),
                 message: tr(lang,
-                    "Fable now has its own weekly quota. Turn on “Fable tracking” in Settings — pings will open the Fable weekly window on schedule and keep its gauge visible. (Cloud routine updates automatically when you toggle it.)",
-                    "Fable 에 전용 주간 쿼터가 생겼어요. 설정에서 “Fable 트래킹”을 켜면 핑이 Fable 주간 창을 예약 시각에 열고 게이지도 상시 표시됩니다. (켜는 순간 클라우드 루틴도 자동 갱신)"),
+                    "Fable now has its own weekly quota. Turn on “Fable tracking” in Settings — pings will open the Fable weekly window on schedule and keep its gauge visible. (Cloud mode: press Update/Apply to sync the routine.)",
+                    "Fable 에 전용 주간 쿼터가 생겼어요. 설정에서 “Fable 트래킹”을 켜면 핑이 Fable 주간 창을 예약 시각에 열고 게이지도 상시 표시됩니다. (클라우드 모드는 갱신/적용 버튼으로 루틴에 반영)"),
                 buttons: [(tr(lang, "Later", "나중에"), false),
                           (tr(lang, "Open Settings", "설정 열기"), true)]) { [weak self] idx in
                 if idx == 1 { self?.openSettings() }
@@ -574,12 +574,31 @@ final class UsageModel: ObservableObject {
 }
 
 /// 드롭다운: 탭(블립 이력 / 사용량 히트맵) + 도넛 게이지.
+/// 게이지 호버 상태 — 어느 게이지(index) 위에 어떤 설명(text) 말풍선을 띄울지.
+struct GaugeHover: Equatable {
+    let index: Int
+    let text: String
+}
+
+/// 말풍선 아래 말꼬리 (▼).
+struct BalloonTail: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        p.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+        p.closeSubpath()
+        return p
+    }
+}
+
 struct MenuContent: View {
     @ObservedObject var model: UsageModel
     var onPingLog: () -> Void = {}
     var onSettings: () -> Void = {}
     @State private var tab = 0
     @State private var monthOffset = 0   // 캘린더/히트맵 표시 월 (0=이번 달, -1=지난 달 …). 데이터 없는 달은 빈 캘린더
+    @State private var gaugeHover: GaugeHover?   // 게이지 라벨 호버 → 테마 말풍선 (index=게이지 위치, text=설명)
     @AppStorage("pacerLang") private var lang = "en"
     @AppStorage("routineHealthy") private var routineHealthy = true
 
@@ -695,32 +714,79 @@ struct MenuContent: View {
         #endif
         let compact = !scoped.isEmpty          // 3개+ 이면 도넛 축소·간격 확보
         let size: CGFloat = compact ? 80 : 96
+        let spacing: CGFloat = compact ? 16 : 32
         // 정체성 점(옵션2) — 채움 임계값과 안 겹치는 톤. 세션=블루, 주간전체=그린, 모델별=앰버/…
         let a5h = Color(red: 0.39, green: 0.78, blue: 0.98)
         let a7d = Color(red: 0.40, green: 0.85, blue: 0.60)
         let scopedAccents: [Color] = [Color(red: 1.0, green: 0.72, blue: 0.30), Color(red: 0.95, green: 0.55, blue: 0.78)]
-        return HStack(spacing: compact ? 16 : 32) {
-            DonutGauge(pct: model.usage?.fiveHour?.pct ?? 0, label: tr(lang, "5-Hour", "5시간"),
-                       sub: Self.remaining(model.usage?.fiveHour?.resetsAt, lang), size: size, accent: a5h,
-                       help: tr(lang, "5-hour session window — shared across all models", "5시간 세션 창 — 모든 모델 공용"))
-            DonutGauge(pct: model.usage?.sevenDay?.pct ?? 0, label: tr(lang, "7-Day", "7일"),
-                       sub: Self.remaining(model.usage?.sevenDay?.resetsAt, lang), size: size, accent: a7d,
-                       help: tr(lang, "Weekly limit — all models combined", "주간 한도 — 모든 모델 합산"))
-            // 주간 모델별(Fable 등) — 미사용(resetsAt nil)이면 "미사용".
-            // 트래킹 OFF 인데 사용량이 잡히면(CLI 직접 사용) 빨간 테두리 점 — 호버 설명으로 트래킹 ON 유도
-            ForEach(Array(scoped.enumerated()), id: \.offset) { i, s in
-                DonutGauge(pct: s.pct, label: s.name,
-                           sub: (s.pct == 0 && s.resetsAt == nil) ? tr(lang, "unused", "미사용") : Self.remaining(s.resetsAt, lang),
-                           size: size,
-                           accent: fableOn ? scopedAccents[i % scopedAccents.count] : Color.pacerRed,
-                           accentHollow: !fableOn,
-                           help: fableOn
-                               ? tr(lang, "\(s.name) weekly window — Pacer pings keep it opening on schedule",
-                                          "\(s.name) 주간 창 — 핑이 예약 시각에 창을 열어 정렬 중")
-                               : tr(lang, "\(s.name) usage detected, but tracking is off — turn on “Fable tracking” in Settings so pings open the weekly window on schedule",
-                                          "\(s.name) 사용량이 잡혔지만 트래킹은 꺼져 있어요 — 설정에서 “Fable 트래킹”을 켜면 핑이 주간 창을 예약 시각에 열어줍니다"))
+
+        // 게이지 항목 일괄 구성 — (도넛 파라미터 + 호버 말풍선 문구)
+        var items: [(pct: Int, label: String, sub: String, accent: Color, hollow: Bool, help: String)] = [
+            (model.usage?.fiveHour?.pct ?? 0, tr(lang, "5-Hour", "5시간"),
+             Self.remaining(model.usage?.fiveHour?.resetsAt, lang), a5h, false,
+             tr(lang, "5-hour session window — shared across all models", "5시간 세션 창 — 모든 모델 공용")),
+            (model.usage?.sevenDay?.pct ?? 0, tr(lang, "7-Day", "7일"),
+             Self.remaining(model.usage?.sevenDay?.resetsAt, lang), a7d, false,
+             tr(lang, "Weekly limit — all models combined", "주간 한도 — 모든 모델 합산")),
+        ]
+        // 주간 모델별(Fable 등) — 미사용(resetsAt nil)이면 "미사용".
+        // 트래킹 OFF 인데 사용량이 잡히면(CLI 직접 사용) 빨간 테두리 점 — 호버 말풍선으로 트래킹 ON 유도
+        for (i, s) in scoped.enumerated() {
+            items.append((s.pct, s.name,
+                          (s.pct == 0 && s.resetsAt == nil) ? tr(lang, "unused", "미사용") : Self.remaining(s.resetsAt, lang),
+                          fableOn ? scopedAccents[i % scopedAccents.count] : Color.pacerRed,
+                          !fableOn,
+                          fableOn
+                              ? tr(lang, "\(s.name) weekly window — Pacer pings keep it opening on schedule",
+                                         "\(s.name) 주간 창 — 핑이 예약 시각에 창을 열어 정렬 중")
+                              : tr(lang, "\(s.name) usage detected, but tracking is off — turn on “Fable tracking” in Settings so pings open the weekly window on schedule",
+                                         "\(s.name) 사용량이 잡혔지만 트래킹은 꺼져 있어요 — 설정에서 “Fable 트래킹”을 켜면 핑이 주간 창을 예약 시각에 열어줍니다")))
+        }
+
+        return HStack(spacing: spacing) {
+            ForEach(items.indices, id: \.self) { i in
+                let it = items[i]
+                DonutGauge(pct: it.pct, label: it.label, sub: it.sub, size: size,
+                           accent: it.accent, accentHollow: it.hollow,
+                           onHover: { h in
+                               // 떠날 때는 내 말풍선일 때만 닫기 (이웃으로 이동 시 깜빡임 방지)
+                               if h { gaugeHover = GaugeHover(index: i, text: it.help) }
+                               else if gaugeHover?.index == i { gaugeHover = nil }
+                           })
             }
         }
+        // 테마 말풍선 — 라벨 호버 시 게이지 행 위로 (위 UI 를 잠시 덮어도 무방). 말꼬리는 해당 게이지 라벨을 가리킴
+        .overlay(alignment: .topLeading) {
+            if let gh = gaugeHover, gh.index < items.count {
+                let centerX = CGFloat(gh.index) * (size + spacing) + size / 2
+                helpBalloon(gh.text, arrowX: centerX)
+                    .alignmentGuide(.top) { $0[.bottom] + 5 }   // 말꼬리 끝이 라벨 위 5pt — 텍스트를 덮지 않게
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.easeOut(duration: 0.12), value: gaugeHover)
+    }
+
+    /// 테마 말풍선 — 다크 배경 + 보라 테두리 + 아래로 향한 말꼬리(arrowX 위치).
+    private func helpBalloon(_ text: String, arrowX: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(text)
+                .font(.system(size: 11))
+                .foregroundStyle(.white)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 11).padding(.vertical, 8)
+                .frame(maxWidth: 270, alignment: .leading)
+                .background(Color(red: 0.16, green: 0.15, blue: 0.19), in: RoundedRectangle(cornerRadius: 9))
+                .overlay(RoundedRectangle(cornerRadius: 9).stroke(Color.pacerPurple.opacity(0.55), lineWidth: 1))
+            // 말꼬리 — 게이지 라벨 중심(arrowX)을 가리키는 ▼
+            BalloonTail()
+                .fill(Color(red: 0.16, green: 0.15, blue: 0.19))
+                .overlay(BalloonTail().stroke(Color.pacerPurple.opacity(0.55), lineWidth: 1))
+                .frame(width: 14, height: 7)
+                .padding(.leading, max(6, arrowX - 7))
+        }
+        .shadow(color: .black.opacity(0.45), radius: 10, y: 3)
     }
 
     /// Pace/Usage 탭 한 칸 — 선택 시 보라 채움·흰 글자, 미선택은 회색. 풀폭(maxWidth) 분할.
