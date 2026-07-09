@@ -17,6 +17,7 @@ struct SettingsView: View {
     @State private var lastNextRunAt: Date?   // 마지막 register 성공 결과의 next_run_at (성공 팝업 안내용)
     @AppStorage("pacerLang") private var lang = "en"
     @AppStorage("routineTimes") private var routineTimes = ""   // 등록된 routine 핑 시각 CSV. 빈 = 미등록
+    @AppStorage("routineModel") private var routineModel = ""   // 등록된 routine 발화 모델 ("" = 기본 haiku). Fable 토글 반영 여부 판단
     @AppStorage("routineHealthy") private var routineHealthy = true   // 마지막 status 결과: 클라우드에 routine 존재+enabled
     @AppStorage("cloudEnvId") private var cloudEnvId = ""   // no_env 시 사용자가 `/schedule` 에서 붙여넣는 환경ID
     @State private var launchAtLogin = FileManager.default.fileExists(atPath: NSHomeDirectory() + "/Library/LaunchAgents/com.dooly.pacer.launch.plist")
@@ -136,7 +137,8 @@ struct SettingsView: View {
                                 Button(tr(lang, "Re-register", "재등록")) { Task { await registerRoutine() } }
                                     .buttonStyle(.borderedProminent)
                                     .frame(maxWidth: .infinity)
-                            } else if !routineTimes.isEmpty && routineTimes != currentCSV {
+                            } else if !routineTimes.isEmpty && (routineTimes != currentCSV || routineModel != desiredModel) {
+                                // 핑 시각 또는 발화 모델(Fable 토글)이 등록본과 다름 → 갱신 필요
                                 Button(tr(lang, "Update", "갱신")) { Task { await registerRoutine() } }
                                     .buttonStyle(.borderedProminent)
                                     .frame(maxWidth: .infinity)
@@ -285,11 +287,8 @@ struct SettingsView: View {
         .onChange(of: hours) { normalizeHours(); save(mode: initialMode) }
         .onChange(of: skipWeekends) { save(mode: initialMode) }
         .onChange(of: skipHolidays) { save(mode: initialMode) }
-        // Fable 트래킹 — 저장 + Cloud 등록 상태면 routine 모델 즉시 재등록 (Local 은 다음 핑부터 자동 반영)
-        .onChange(of: fableTrack) {
-            save(mode: initialMode)
-            if initialMode == "cloud", !routineTimes.isEmpty { Task { await registerRoutine() } }
-        }
+        // Fable 트래킹 — 저장만 (Local 은 다음 핑부터 자동 반영, Cloud 반영은 컨벤션대로 갱신/적용 버튼에서)
+        .onChange(of: fableTrack) { save(mode: initialMode) }
         // mode 는 Done 시에만 확정 저장 — X 닫기로 종료하면 기존 모드 유지
         .onChange(of: launchAtLogin) { setLaunchAtLogin(launchAtLogin) }
         // 동기화 중엔 창 닫기 버튼 비활성 (작업 중단·중복 방지)
@@ -321,6 +320,9 @@ struct SettingsView: View {
         let screen = ((NSScreen.main?.visibleFrame.height) ?? 900) - 48
         return min(content, screen)
     }
+
+    /// 현재 토글 기준 routine 발화 모델 ("" = 기본 haiku). 등록본(routineModel)과 다르면 갱신 필요.
+    private var desiredModel: String { fableTrack ? "claude-fable-5" : "" }
 
     // MARK: - Routine (claude -p 경유)
 
@@ -381,8 +383,8 @@ struct SettingsView: View {
     @discardableResult
     private func syncRoutineForMode() async -> Bool {
         if mode == "cloud" {
-            // 핑 변경 없고 이미 등록돼 있으면 enable(가벼움), 실패(웹삭제 등)·핑 변경이면 register(전체)
-            if !routineTimes.isEmpty && routineTimes == currentCSV {
+            // 핑·모델(Fable 토글) 변경 없고 이미 등록돼 있으면 enable(가벼움), 변경·실패(웹삭제 등)면 register(전체)
+            if !routineTimes.isEmpty && routineTimes == currentCSV && routineModel == desiredModel {
                 if await enableRoutine() { return true }
             }
             return await registerRoutine()
@@ -418,7 +420,7 @@ struct SettingsView: View {
         // cloudEnvId 비어있으면 빈 문자열 → 스킬이 환경 자동탐지. 있으면 그 env 로 최우선 등록.
         let envTrimmed = cloudEnvId.trimmingCharacters(in: .whitespaces)
         // Fable 트래킹 ON → routine 발화 모델을 Fable 로 (주간 창도 예약 시각에 열림)
-        let pingModel = fableTrack ? "claude-fable-5" : ""
+        let pingModel = desiredModel
         var r = await RoutineService.run("register", times: times, env: envTrimmed, model: pingModel)
         // 신규 계정(trigger 0개) no_env + env 미입력 → /schedule 로 env_id 자동취득 후 재등록 (~20초 추가)
         if r?.reason == "no_env", envTrimmed.isEmpty {
@@ -431,6 +433,7 @@ struct SettingsView: View {
         if ok {
             syncError = nil
             routineTimes = currentCSV
+            routineModel = pingModel   // 등록된 발화 모델 기록 — Fable 토글 변경 감지(갱신 버튼)용
             routineHealthy = true
             lastNextRunAt = r?.nextRunAt   // 성공 팝업 안내용
             save(mode: mode)        // 성공 시에만 config 확정 (실패·타임아웃 시 불일치 방지)
