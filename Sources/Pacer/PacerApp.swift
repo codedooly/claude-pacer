@@ -755,15 +755,14 @@ struct MenuContent: View {
                            })
             }
         }
-        // 테마 말풍선 — 라벨 호버 시 게이지 행 위로 (위 UI 를 잠시 덮어도 무방). 말꼬리는 해당 게이지 라벨을 가리킴
+        // 테마 말풍선 — 라벨 호버 시 게이지 행 위로 (위 UI 를 잠시 덮어도 무방). 말꼬리는 해당 게이지 라벨을 가리킴.
+        // if-let 조건 래퍼는 alignmentGuide 를 무시(라벨 덮는 버그)하므로 상시 배치 + opacity 로 표시 전환
         .overlay(alignment: .topLeading) {
-            if let gh = gaugeHover, gh.index < items.count {
-                let centerX = CGFloat(gh.index) * (size + spacing) + size / 2
-                helpBalloon(gh.text, arrowX: centerX)
-                    .alignmentGuide(.top) { $0[.bottom] + 5 }   // 말꼬리 끝이 라벨 위 5pt — 텍스트를 덮지 않게
-                    .allowsHitTesting(false)
-                    .transition(.opacity)
-            }
+            let centerX = CGFloat(gaugeHover?.index ?? 0) * (size + spacing) + size / 2
+            helpBalloon(gaugeHover?.text ?? "", arrowX: centerX)
+                .alignmentGuide(.top) { $0[.bottom] + 5 }   // 말꼬리 끝이 라벨 위 5pt — 텍스트를 덮지 않게
+                .opacity(gaugeHover == nil ? 0 : 1)
+                .allowsHitTesting(false)
         }
         .animation(.easeOut(duration: 0.12), value: gaugeHover)
     }
