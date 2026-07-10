@@ -21,6 +21,10 @@ enum RoutineService {
     /// @param model  (선택) routine 발화 모델 — Fable 트래킹 시 "claude-fable-5". 빈 값이면 기본(haiku)
     /// @returns 파싱된 PaceResult (실패 시 nil)
     static func run(_ action: String, times: [String] = [], env: String = "", model: String = "") async -> PaceResult? {
+        // claude 미설치/경로 소실 방어 — 실행 시도 전에 감지해 무한 스피너·크래시 대신 명확 안내 (bell 케이스: 설치 정리 중 claude 삭제)
+        guard FileManager.default.isExecutableFile(atPath: PingRunner.claudePath()) else {
+            return PaceResult(ok: false, id: "", enabled: false, nextRunAt: nil, cron: "", reason: "no_claude", errorDetail: nil)
+        }
         // 구버전 CLI 방어 — --setting-sources 미지원(예: 1.0.65)이면 애매한 실패 대신 명확한 업데이트 안내
         guard await ClaudeCLI.supportsFlag("--setting-sources") else {
             return PaceResult(ok: false, id: "", enabled: false, nextRunAt: nil, cron: "", reason: "old_cli", errorDetail: nil)

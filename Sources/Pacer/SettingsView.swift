@@ -11,6 +11,7 @@ struct SettingsView: View {
     @State private var initialMode: String   // 열었을 때 모드 (Done 시 변경 감지 → routine 1회 sync)
     @State private var window: NSWindow?
     @State private var routineLoading = false
+    @State private var routineSeconds = 0     // 갱신/재등록 인라인 스피너 경과 초 (멈춘 게 아님을 표시)
     @State private var syncing = false        // Done 시 routine 동기화 카운트다운
     @State private var syncCountdown = 20
     @State private var syncError: String?     // Cloud 등록 실패 안내 (예: no_env). 성공 시 nil 로 클리어
@@ -59,9 +60,10 @@ struct SettingsView: View {
 
                 // 1차 CTA — 설정 확정 + (Cloud) routine 동기화 후 닫기. 동기화 중 카운트다운 표시.
                 Button {
-                    // 모드 변경 OR (Cloud에서) 핑 변경 → 동기화 후 닫기, 아니면 바로 닫기
+                    // 모드 변경 OR (Cloud에서) 핑·발화모델(Fable 토글) 변경 → 동기화 후 닫기, 아니면 바로 닫기
                     let pingChanged = mode == "cloud" && !routineTimes.isEmpty && routineTimes != currentCSV
-                    if mode != initialMode || pingChanged { startSyncAndClose() }
+                    let modelChanged = mode == "cloud" && !routineTimes.isEmpty && routineModel != desiredModel
+                    if mode != initialMode || pingChanged || modelChanged { startSyncAndClose() }
                     else { window?.performClose(nil) }
                 } label: {
                     Group {
@@ -123,8 +125,9 @@ struct SettingsView: View {
                     if routineLoading {
                         HStack(spacing: 7) {
                             ProgressView().controlSize(.small)
-                            Text(tr(lang, "Syncing routine…", "routine 동기화 중…"))
-                                .font(.system(size: 11)).foregroundStyle(.secondary)
+                            // 경과 초 표시 — 등록은 20~90초(2단계 등록 포함)라 멈춘 게 아님을 보여줌
+                            Text(tr(lang, "Syncing routine… \(routineSeconds)s", "routine 동기화 중… \(routineSeconds)초"))
+                                .font(.system(size: 11)).foregroundStyle(.secondary).monospacedDigit()
                         }
                     } else {
                         Label(syncText, systemImage: syncIcon)
@@ -416,6 +419,12 @@ struct SettingsView: View {
     @discardableResult
     private func registerRoutine() async -> Bool {
         routineLoading = true
+        // 경과 초 카운터 — 갱신/재등록 인라인 스피너용 (Done 오버레이의 카운트다운과 별개)
+        routineSeconds = 0
+        let secCounter = Task { @MainActor in
+            while !Task.isCancelled { try? await Task.sleep(for: .seconds(1)); routineSeconds += 1 }
+        }
+        defer { secCounter.cancel() }
         let times = hours.sorted().map { String(format: "%02d:00", $0) }
         // cloudEnvId 비어있으면 빈 문자열 → 스킬이 환경 자동탐지. 있으면 그 env 로 최우선 등록.
         let envTrimmed = cloudEnvId.trimmingCharacters(in: .whitespaces)
@@ -443,6 +452,11 @@ struct SettingsView: View {
             syncError = tr(lang,
                 "No cloud environment found. Create one at claude.ai/code, then retry — or paste your env_… below.",
                 "클라우드 환경이 없습니다. claude.ai/code 에서 환경을 만든 뒤 다시 시도하거나, /schedule 의 env_… 를 아래에 붙여넣으세요.")
+        } else if r?.reason == "no_claude" {
+            // claude 실행파일을 못 찾음 — 재설치 안내 (닥터의 설치 버튼과 동일 해법)
+            syncError = tr(lang,
+                "Claude Code not found on this Mac. Install it (Doctor → Install, or claude.ai/install.sh), then retry.",
+                "이 맥에서 Claude Code 를 찾을 수 없습니다. 설치 후 다시 시도하세요 (닥터 → 설치 버튼 또는 claude.ai/install.sh).")
         } else if r?.reason == "old_cli" {
             // 구버전 CLI (--setting-sources 미지원, 예: 1.0.65) — 업데이트 안내
             syncError = tr(lang,

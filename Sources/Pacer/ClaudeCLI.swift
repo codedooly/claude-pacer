@@ -125,6 +125,7 @@ enum ClaudeCLI {
         }
 
         var timedOut = false
+        var launchFailed = false
         await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
             // continuation 더블 resume 방지 가드 (terminationHandler vs timeout 경쟁)
             let lock = NSLock()
@@ -136,7 +137,7 @@ enum ClaudeCLI {
                 c.resume()
             }
             p.terminationHandler = { _ in resumeOnce() }
-            do { try p.run() } catch { resumeOnce(); return }
+            do { try p.run() } catch { launchFailed = true; resumeOnce(); return }
             onStart?(p)
             // 타임아웃 — 네트워크·claude 문제로 무한 대기 방지
             Task {
@@ -148,6 +149,11 @@ enum ClaudeCLI {
         if onChunk != nil {
             out.fileHandleForReading.readabilityHandler = nil
             err.fileHandleForReading.readabilityHandler = nil
+        }
+
+        // 실행 자체 실패(claude 미설치·경로 소실) — 미실행 프로세스의 terminationStatus 접근은 크래시라 즉시 반환
+        if launchFailed {
+            return Result(output: "launch-failed: \(executable) 를 실행할 수 없습니다 (Claude Code 미설치/경로 소실?)", status: -1, timedOut: false)
         }
 
         let outData = out.fileHandleForReading.readDataToEndOfFile()
