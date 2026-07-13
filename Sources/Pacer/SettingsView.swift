@@ -63,7 +63,10 @@ struct SettingsView: View {
                     // 모드 변경 OR (Cloud에서) 핑·발화모델(Fable 토글) 변경 → 동기화 후 닫기, 아니면 바로 닫기
                     let pingChanged = mode == "cloud" && !routineTimes.isEmpty && routineTimes != currentCSV
                     let modelChanged = mode == "cloud" && !routineTimes.isEmpty && routineModel != desiredModel
+                    // Fable 토글은 지연 저장 (X 닫기 = 파기) — Cloud 는 위 modelChanged 가 동기화까지, Local/미등록은 저장만으로 적용
+                    let fableChanged = fableTrack != Config.load().fableOn
                     if mode != initialMode || pingChanged || modelChanged { startSyncAndClose() }
+                    else if fableChanged { save(mode: initialMode, fable: fableTrack); window?.performClose(nil) }
                     else { window?.performClose(nil) }
                 } label: {
                     Group {
@@ -290,8 +293,8 @@ struct SettingsView: View {
         .onChange(of: hours) { normalizeHours(); save(mode: initialMode) }
         .onChange(of: skipWeekends) { save(mode: initialMode) }
         .onChange(of: skipHolidays) { save(mode: initialMode) }
-        // Fable 트래킹 — 저장만 (Local 은 다음 핑부터 자동 반영, Cloud 반영은 컨벤션대로 갱신/적용 버튼에서)
-        .onChange(of: fableTrack) { save(mode: initialMode) }
+        // Fable 트래킹 — 즉시 저장하지 않음 (X 닫기 = 파기, 갱신/적용 = 확정. mode 와 동일 컨벤션)
+        // 저장 시점: 적용(Done) 분기 또는 registerRoutine 성공 시 save()
         // mode 는 Done 시에만 확정 저장 — X 닫기로 종료하면 기존 모드 유지
         .onChange(of: launchAtLogin) { setLaunchAtLogin(launchAtLogin) }
         // 동기화 중엔 창 닫기 버튼 비활성 (작업 중단·중복 방지)
@@ -395,7 +398,7 @@ struct SettingsView: View {
             routineLoading = true
             let r = await RoutineService.run("disable")   // 비활성(중복 방지). routineTimes 는 재활성 위해 유지
             let ok = r?.ok ?? false
-            if ok { save(mode: mode); initialMode = mode }   // 성공 시에만 config 확정
+            if ok { save(mode: mode, fable: fableTrack); initialMode = mode }   // 성공 시에만 config 확정
             routineLoading = false
             return ok
         }
@@ -409,7 +412,7 @@ struct SettingsView: View {
         let ok = r?.ok ?? false
         if ok {
             routineHealthy = true
-            save(mode: mode); initialMode = mode
+            save(mode: mode, fable: fableTrack); initialMode = mode
         }
         routineLoading = false
         return ok
@@ -445,7 +448,7 @@ struct SettingsView: View {
             routineModel = pingModel   // 등록된 발화 모델 기록 — Fable 토글 변경 감지(갱신 버튼)용
             routineHealthy = true
             lastNextRunAt = r?.nextRunAt   // 성공 팝업 안내용
-            save(mode: mode)        // 성공 시에만 config 확정 (실패·타임아웃 시 불일치 방지)
+            save(mode: mode, fable: fableTrack)   // 성공 시에만 config 확정 (실패·타임아웃 시 불일치 방지)
             initialMode = mode
         } else if r?.reason == "no_env" {
             // 자동취득도 실패 = 환경 자체가 없음. 웹 생성 안내 + env 직접 붙여넣기 폴백
@@ -582,18 +585,19 @@ struct SettingsView: View {
         skipWeekends = d.skipWeekends
         skipHolidays = d.skipHolidays
         fableTrack = d.fableOn
-        save(mode: initialMode)
+        save(mode: initialMode, fable: fableTrack)   // 기본값 복원은 명시적 액션 — fable 도 함께 확정
     }
 
     /// config 저장 + launchd 처리. mode 는 명시적으로 받는다 (Done 전엔 initialMode 로 저장 — 임시 모드 전환이 X 닫기에 새지 않게).
-    private func save(mode m: String) {
+    /// @param fable 적용 확정된 Fable 토글 값 — 갱신/적용 경로에서만 전달. nil 이면 기존 값 보존 (즉시 저장 토글들이 미적용 fable 을 끌고가지 않게)
+    private func save(mode m: String, fable: Bool? = nil) {
         let times = hours.sorted().map { String(format: "%02d:00", $0) }
         // 기존 config 로드 후 관리 필드만 갱신 — authPassed 등 미관리 필드 보존 (새 Config 로 덮으면 날아감)
         var cfg = Config.load()
         cfg.pingTimes = times
         cfg.skipWeekends = skipWeekends
         cfg.skipHolidays = skipHolidays
-        cfg.fablePing = fableTrack
+        if let fable { cfg.fablePing = fable }
         cfg.pingMode = m
         cfg.save()
         if m == "cloud" {
