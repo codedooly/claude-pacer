@@ -122,6 +122,24 @@ struct SettingsView: View {
                         "각 핑은 앞 핑보다 5시간 이상 뒤입니다 — 창은 5시간마다만 리셋되니, 더 가까운 핑은 의미가 없어요."))
             }
 
+            // Local — 핑 스케줄러(launchd) 등록 상태. 핑 시각 바로 아래(핑이 실제 나가는지의 핵심 상태라 상단 배치)
+            if mode == "local" {
+                Section {
+                    if PingScheduler.isInstalled() {
+                        Label(tr(lang, "Ping scheduler: registered", "핑 스케줄러: 등록됨"), systemImage: "checkmark.seal.fill")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.green)
+                    } else {
+                        Label(tr(lang, "Ping scheduler not registered — pings may not fire", "핑 스케줄러 미등록 — 핑이 안 나갈 수 있어요"), systemImage: "exclamationmark.triangle.fill")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.orange)
+                        Button(tr(lang, "Re-register", "재등록")) { PingScheduler.reinstall(Config.load()) }
+                            .buttonStyle(.borderedProminent)
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+            }
+
             // Cloud 모드 — Pacer 가 routine 을 자동 등록/갱신 (복사-붙여넣기 없음)
             if mode == "cloud" {
                 Section {
@@ -229,21 +247,6 @@ struct SettingsView: View {
                             "맥북이 잠들면 핑이 나가지 않아요. 터미널에서 실행하면 덮개를 닫아도 (전원 연결 시) 깨어 있습니다. 비밀번호가 필요해요."))
                 }
 
-                // Local — 핑 스케줄러(launchd) 등록 상태 + 미등록 시 재등록
-                Section {
-                    if PingScheduler.isInstalled() {
-                        Label(tr(lang, "Ping scheduler: registered", "핑 스케줄러: 등록됨"), systemImage: "checkmark.seal.fill")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.green)
-                    } else {
-                        Label(tr(lang, "Ping scheduler not registered — pings may not fire", "핑 스케줄러 미등록 — 핑이 안 나갈 수 있어요"), systemImage: "exclamationmark.triangle.fill")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.orange)
-                        Button(tr(lang, "Re-register", "재등록")) { PingScheduler.reinstall(Config.load()) }
-                            .buttonStyle(.borderedProminent)
-                            .frame(maxWidth: .infinity)
-                    }
-                }
             } else {
                 Section {
                     Label(tr(lang,
@@ -398,7 +401,28 @@ struct SettingsView: View {
             routineLoading = true
             let r = await RoutineService.run("disable")   // 비활성(중복 방지). routineTimes 는 재활성 위해 유지
             let ok = r?.ok ?? false
-            if ok { save(mode: mode, fable: fableTrack); initialMode = mode }   // 성공 시에만 config 확정
+            if ok {
+                save(mode: mode, fable: fableTrack); initialMode = mode   // 성공 시에만 config 확정
+            } else {
+                // 침묵 실패 방지 — claude 미존재(bell 케이스) 등 사유를 다이얼로그로 (적용이 무반응으로 보이던 버그)
+                let msg: String
+                switch r?.reason {
+                case "no_claude":
+                    msg = tr(lang,
+                        "Claude Code not found — can't disable the cloud routine. Install it (Doctor → Install), then retry.",
+                        "Claude Code 를 찾을 수 없어 클라우드 루틴을 비활성할 수 없습니다. 설치 후 다시 시도하세요 (닥터 → 설치).")
+                case "old_cli":
+                    msg = tr(lang,
+                        "Your Claude Code is too old. Update it (`claude update`), then retry.",
+                        "Claude Code 버전이 낮습니다. `claude update` 후 다시 시도하세요.")
+                default:
+                    msg = r?.errorDetail ?? tr(lang, "Unknown error — see routine log (Doctor).", "알 수 없는 오류 — 루틴 로그(닥터)를 확인하세요.")
+                }
+                await MainActor.run {
+                    PacerDialog.show(title: tr(lang, "Switch to Local failed", "Local 전환 실패"),
+                                     message: msg, buttons: [(tr(lang, "OK", "확인"), true)])
+                }
+            }
             routineLoading = false
             return ok
         }
