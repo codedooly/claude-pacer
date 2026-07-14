@@ -83,7 +83,7 @@ enum PingRunner {
             NSHomeDirectory() + "/.local/bin/claude",
             "/opt/homebrew/bin/claude",
             "/usr/local/bin/claude",
-        ]
+        ] + ClaudeCLI.nvmClaudeCandidates()   // npm 글로벌(nvm bin) 설치 대응
         for c in candidates where FileManager.default.isExecutableFile(atPath: c) { return c }
         return "/opt/homebrew/bin/claude"
     }
@@ -97,12 +97,12 @@ enum PingRunner {
             let c = String(dir) + "/claude"
             if FileManager.default.isExecutableFile(atPath: c) { return c }
         }
-        // 폴백 — 알려진 위치 (.local/bin 우선: standalone 최신본이 보통 여기)
+        // 폴백 — 알려진 위치 (.local/bin 우선: standalone 최신본이 보통 여기) + nvm bin (npm 글로벌 설치, .zshrc 라 로그인 PATH 에 없음)
         let candidates = [
             NSHomeDirectory() + "/.local/bin/claude",
             "/opt/homebrew/bin/claude",
             "/usr/local/bin/claude",
-        ]
+        ] + ClaudeCLI.nvmClaudeCandidates()
         for c in candidates where FileManager.default.isExecutableFile(atPath: c) { return c }
         return "/opt/homebrew/bin/claude"
     }

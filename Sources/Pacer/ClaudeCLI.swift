@@ -67,6 +67,16 @@ enum ClaudeCLI {
         return help.contains(flag)
     }
 
+    /// nvm 노드 버전 bin 의 claude 후보 (최신 버전 우선) — npm 글로벌 설치 케이스.
+    /// nvm 초기화는 .zshrc(인터랙티브)에 있어 `-lc` 로그인 셸 PATH 에 안 잡힘 (bell 케이스 — Doctor node 탐지와 동일 원인).
+    static func nvmClaudeCandidates() -> [String] {
+        let base = NSHomeDirectory() + "/.nvm/versions/node"
+        let versions = (try? FileManager.default.contentsOfDirectory(atPath: base)) ?? []
+        return versions
+            .sorted { $0.compare($1, options: .numeric) == .orderedDescending }
+            .map { base + "/\($0)/bin/claude" }
+    }
+
     /// PATH·알려진 위치에서 발견되는 모든 claude 경로 (which -a 격) — 다중 설치 감지용.
     /// 첫 항목이 실제로 Pacer 가 쓰는 것(PingRunner.claudePath 와 동일 순서).
     static func allClaudePaths() -> [String] {
@@ -79,8 +89,9 @@ enum ClaudeCLI {
         }
         let shellPath = loginShellEnv?["PATH"] ?? ProcessInfo.processInfo.environment["PATH"] ?? ""
         for dir in shellPath.split(separator: ":") { add(String(dir) + "/claude") }
-        // PATH 에 없을 수도 있는 알려진 위치
+        // PATH 에 없을 수도 있는 알려진 위치 + nvm 노드 bin (npm 글로벌 설치)
         for c in [NSHomeDirectory() + "/.local/bin/claude", "/opt/homebrew/bin/claude", "/usr/local/bin/claude"] { add(c) }
+        for c in nvmClaudeCandidates() { add(c) }
         return result
     }
 
