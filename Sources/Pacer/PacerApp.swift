@@ -32,6 +32,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
+        // 전역 다크 고정 — Pacer 는 다크 디자인. 설정·닥터·페이스로그 창이 시스템 라이트 외관을 따라가면
+        // 다크 튜닝 색과 섞여 흐릿/검정-on-검정이 되므로 모든 창을 다크로 통일 (팝오버·다이얼로그는 이미 다크 고정)
+        NSApp.appearance = NSAppearance(named: .darkAqua)
+
         // config 정규화 + 핑 스케줄 최신화
         let cfg = Config.load()
         cfg.save()
