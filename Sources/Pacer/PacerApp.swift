@@ -535,7 +535,9 @@ final class UsageModel: ObservableObject {
         holidays = (localSkip && cfg.skipHolidays) ? KoreanHolidays.holidays(year: Calendar.current.component(.year, from: Date())) : []
         skipWeekends = localSkip && cfg.skipWeekends
         pings = PingLog.load()
-        plan = service.plan(from: oauth)
+        // Keychain 플랜은 라이브 값(fetchPlan) 도착 전 초기 표시용만 — 매 refresh 덮어쓰면
+        // 쿨다운 조기 return 경로에서 stale 값(옛 등급)으로 되돌아가는 버그 (1.3.5)
+        if plan == nil { plan = service.plan(from: oauth) }
         usageHistory = UsageHistory.load()
 
         // usage API 만 쿨다운(429 회피): Refresh 버튼 5초, 자동/팝업 60초 내 재호출 무시
