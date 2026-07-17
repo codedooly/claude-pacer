@@ -568,6 +568,11 @@ final class UsageModel: ObservableObject {
         case .failure(let e):
             error = e.description
         }
+        // 플랜은 서버(profile)가 진실 소스 — Keychain rateLimitTier 는 토큰 재발급 전까지 stale.
+        // usage 와 같은 쿨다운 뒤에서만 호출(429 회피). 실패 시 위(line 538)의 Keychain 값 유지.
+        if let livePlan = await service.fetchPlan(from: oauth) {
+            plan = livePlan
+        }
         usageHistory = UsageHistory.load()
         updatedAt = Date()
     }

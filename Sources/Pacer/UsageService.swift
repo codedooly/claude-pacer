@@ -41,6 +41,7 @@ enum UsageError: Error, CustomStringConvertible {
 struct UsageService {
     static let keychainService = "Claude Code-credentials"
     static let usageURL = URL(string: "https://api.anthropic.com/api/oauth/usage")!
+    static let profileURL = URL(string: "https://api.anthropic.com/api/oauth/profile")!
     static let oauthBeta = "oauth-2025-04-20"
 
     /// Keychain 의 claudeAiOauth dict (token / subscriptionType 공통 소스).
@@ -69,17 +70,48 @@ struct UsageService {
     /// Claude Code 인증 토큰 존재 여부 (온보딩 분기용).
     func hasCredentials(from dict: [String: Any]? = nil) -> Bool { token(from: dict) != nil }
 
-    /// 구독 플랜 + 등급 — rateLimitTier 기반 ("Max 5x" / "Max 20x" / "Pro").
+    /// 구독 플랜 + 등급 — Keychain rateLimitTier 기반 ("Max 5x" / "Max 20x" / "Pro").
+    /// 즉시·오프라인 표시용. 단 이 값은 토큰 재발급 전까지 stale(플랜 변경 미반영)이라
+    /// refresh 는 `fetchPlan()`(서버 profile) 으로 덮어써 라이브 값을 우선한다.
     func plan(from dict: [String: Any]? = nil) -> String? {
         guard let d = dict ?? oauthDict() else { return nil }
         let tier = (d["rateLimitTier"] as? String) ?? ""
+        if let label = Self.planLabel(fromTier: tier) { return label }
+        // 폴백: subscriptionType ("max" → "Max")
+        if let sub = d["subscriptionType"] as? String { return sub.capitalized }
+        return nil
+    }
+
+    /// rateLimitTier 문자열 → 표시 라벨. Keychain·profile 양쪽에서 공유.
+    static func planLabel(fromTier tier: String) -> String? {
         if tier.contains("max_20x") { return "Max (20x)" }
         if tier.contains("max_5x") { return "Max (5x)" }
         if tier.contains("pro") { return "Pro" }
         if tier.contains("free") { return "Free" }
-        // 폴백: subscriptionType ("max" → "Max")
-        if let sub = d["subscriptionType"] as? String { return sub.capitalized }
         return nil
+    }
+
+    /// 실시간 플랜 — /api/oauth/profile 의 organization.rate_limit_tier 기반.
+    /// Keychain rateLimitTier 는 토큰 재발급 전까지 stale 이므로(플랜 업그레이드 시 usage·리셋만 갱신되고
+    /// 라벨은 옛 등급 유지) 서버 값을 진실 소스로 쓴다. 실패 시 nil → 호출부가 Keychain 값 유지.
+    func fetchPlan(from dict: [String: Any]? = nil) async -> String? {
+        guard let tok = token(from: dict) else { return nil }
+
+        var req = URLRequest(url: Self.profileURL)
+        req.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        req.setValue("Bearer \(tok)", forHTTPHeaderField: "Authorization")
+        req.setValue(Self.oauthBeta, forHTTPHeaderField: "anthropic-beta")
+
+        // profile 조회 (실패·비200·파싱불가 → nil, Keychain 폴백)
+        guard
+            let (data, resp) = try? await Self.session.data(for: req),
+            (resp as? HTTPURLResponse)?.statusCode == 200,
+            let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+
+        let org = obj["organization"] as? [String: Any]
+        let tier = (org?["rate_limit_tier"] as? String) ?? ""
+        return Self.planLabel(fromTier: tier)
     }
 
     /// usage 전용 세션 — 캐시 완전 비활성. API 가 Cache-Control 을 안 줘서 URLSession 휴리스틱 캐시가
