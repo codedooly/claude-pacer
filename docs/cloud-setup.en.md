@@ -10,7 +10,7 @@
 
 ## How it works
 
-When you pick **Cloud** and press **Apply**, Pacer registers a Claude Routine (`pace-window-warm`) via the cloud triggers API. It runs the bundled instructions through `claude -p` (no global skill install). The routine then runs one lightweight prompt (read this repo's README and describe what Pacer is) at your ping times every day — opening a fresh 5-hour window, even when your Mac is asleep.
+When you pick **Cloud** and press **Apply**, Pacer registers a Claude Routine (`pace-window-warm`) via the cloud triggers API. It runs the bundled instructions through `claude -p` (no global skill install). The routine then runs one lightweight prompt (summarize the `codedooly/claude-pacer` repo in one sentence) at your ping times every day — opening a fresh 5-hour window, even when your Mac is asleep. The prompt forbids the answer's summary block (`routine_summary`), so each run does not trigger a mobile push.
 
 To register, the cloud needs to know **which environment** the routine runs in (`environment_id`). Pacer gets it automatically:
 
