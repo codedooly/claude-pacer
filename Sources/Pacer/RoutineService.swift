@@ -16,7 +16,7 @@ struct PaceResult {
 /// (글로벌 ~/.claude/skills 설치 없이 자체 완결 — 슬래시커맨드 해석에 의존하던 비결정성 제거)
 enum RoutineService {
     /// 번들 지침(PaceScheduleSkill.md)의 프롬프트·도구 설정이 바뀔 때 올린다 → 업데이트 후 첫 실행에 routine 자동 재등록 1회 트리거.
-    static let definitionVersion = 2
+    static let definitionVersion = 3
     /// 서버 routine 에 적용된 정의 버전 (UserDefaults, 기본 0 = 구버전 정의)
     static let definitionVersionKey = "routineDefinitionVersion"
 

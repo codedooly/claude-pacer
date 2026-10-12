@@ -1,6 +1,6 @@
 ---
 name: "pace-schedule"
-description: "Pacer 의 5시간 윈도우 워밍 클라우드 routine 관리 — RemoteTrigger 로 register/disable/enable/status. ARGUMENTS 로 동작과 핑 시각을 받는다. 매일 지정 시각(KST)에 클라우드 Claude 가 가벼운 프롬프트(README 읽기) 1건을 수행해 5h usage window 를 워밍한다. \"페이스 스케줄\", \"루틴 등록/해제\" 요청에 사용."
+description: "Pacer 의 5시간 윈도우 워밍 클라우드 routine 관리 — RemoteTrigger 로 register/disable/enable/status. ARGUMENTS 로 동작과 핑 시각을 받는다. 매일 지정 시각(KST)에 클라우드 Claude 가 가벼운 프롬프트(레포 한 줄 요약) 1건을 수행해 5h usage window 를 워밍한다. \"페이스 스케줄\", \"루틴 등록/해제\" 요청에 사용."
 ---
 
 Pacer 의 워밍 routine(`pace-window-warm`)을 `RemoteTrigger`(claude.ai code triggers API)로 관리한다.
@@ -101,7 +101,7 @@ auth 는 in-process — curl 쓰지 말 것.
             "session_id": "",
             "type": "user",
             "parent_tool_use_id": null,
-            "message": { "role": "user", "content": "https://github.com/codedooly/claude-pacer 저장소의 README 를 읽고 Pacer 가 어떤 앱인지 알려줘" }
+            "message": { "role": "user", "content": "Summarize the GitHub repo codedooly/claude-pacer in one sentence. Reply with that sentence only. Do not include a routine_summary block and do not send any notification." }
         } }
       ]
     }
@@ -110,8 +110,11 @@ auth 는 in-process — curl 쓰지 말 것.
 ```
 
 > `environment_id` 는 **1번에서 list 로 확보한 `<env>`** 를 그대로 넣는다 (계정마다 다름 — 하드코딩 금지).
-> `disallowed_tools: ["PushNotification"]` — 세션 내부 푸시 도구 경로만 차단. **실행 완료 요약 푸시는 플랫폼이 보내므로 routine 설정으로 못 끈다** — 프롬프트가 곧 푸시 문구가 되니 README URL 을 직접 읽게 한다 (동명 레포 `claude-pacer` 가 여럿이라 검색으로는 이 앱이 안 잡힘). `allowed_tools` 는 README 읽기에 필요한 WebFetch/WebSearch 만.
-> 프롬프트는 "도구 쓰지 말고 ok 만" 류의 금지형 대신 **실제 수행 가능한 가벼운 작업**(README 읽기)으로 둔다 — 금지형은 에이전트가 "사용량 한도 우회" 로 판단해 거절 + 푸시를 유발했음.
+> **프롬프트 문자열은 위 그대로 사용** (실측으로 확정된 문구):
+> - 루틴 완료 푸시(모바일)는 claude.ai 플랫폼이 에이전트 답변의 `routine_summary` 블록을 가져다 보낸다. 프롬프트에서 그 블록을 금지하고 한 문장만 답하게 하면 **푸시가 오지 않는다** (실측 확인). `disallowed_tools: ["PushNotification"]` 은 세션 내부 푸시 도구 경로까지 함께 차단.
+> - 레포 이름 `codedooly/claude-pacer` 만으로 에이전트가 github.com 주소를 만들어 WebFetch 로 정확히 읽는다 — URL 불필요, 동명 레포 혼동 없음. `allowed_tools` 는 그에 필요한 WebFetch/WebSearch 만.
+> - 영어·한 문장인 이유: 답변이 루틴 목록·세션에 그대로 노출되므로 짧고 중립적으로.
+> - "도구 쓰지 말고 ok 만" 류의 금지형 프롬프트는 쓰지 않는다 — 에이전트가 "사용량 한도 우회" 로 판단해 거절 + 푸시를 유발했음. 실제 수행 가능한 가벼운 작업이어야 한다.
 
 ## 4. 결과 출력 — Pacer 파싱용 (필수)
 
