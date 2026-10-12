@@ -10,7 +10,7 @@
 
 ## How it works
 
-When you pick **Cloud** and press **Apply**, Pacer registers a Claude Routine (`pace-window-warm`) via the cloud triggers API. It runs the bundled instructions through `claude -p` (no global skill install). The routine then fires a one-word `ok` keep-alive at your ping times every day — opening a fresh 5-hour window, even when your Mac is asleep.
+When you pick **Cloud** and press **Apply**, Pacer registers a Claude Routine (`pace-window-warm`) via the cloud triggers API. It runs the bundled instructions through `claude -p` (no global skill install). The routine then runs one lightweight prompt (read this repo's README and describe what Pacer is) at your ping times every day — opening a fresh 5-hour window, even when your Mac is asleep.
 
 To register, the cloud needs to know **which environment** the routine runs in (`environment_id`). Pacer gets it automatically:
 
@@ -19,6 +19,8 @@ To register, the cloud needs to know **which environment** the routine runs in (
 3. **No environment at all** → you create one once at [claude.ai/code](https://claude.ai/code) (web), then retry.
 
 `environment_id` differs per account and **can't be guessed or hardcoded** — that's why a one-time web step is needed for brand-new accounts.
+
+**Auto re-register after updates.** If an app update changes the routine definition (prompt or tool settings), Pacer re-registers the routine in the background on the first launch after updating — no need to open Settings and apply again. The existing routine is updated in place, so nothing is deleted or recreated. If re-registration fails (Claude Code missing, network, etc.), Pacer retries on the next launch.
 
 ---
 
