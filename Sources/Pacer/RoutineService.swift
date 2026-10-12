@@ -15,6 +15,44 @@ struct PaceResult {
 /// 번들 내장 지침(PaceScheduleSkill.md)을 명령형으로 감싸 `claude -p` 로 실행하고 PACE_RESULT 를 파싱한다.
 /// (글로벌 ~/.claude/skills 설치 없이 자체 완결 — 슬래시커맨드 해석에 의존하던 비결정성 제거)
 enum RoutineService {
+    /// 번들 지침(PaceScheduleSkill.md)의 프롬프트·도구 설정이 바뀔 때 올린다 → 업데이트 후 첫 실행에 routine 자동 재등록 1회 트리거.
+    static let definitionVersion = 2
+    /// 서버 routine 에 적용된 정의 버전 (UserDefaults, 기본 0 = 구버전 정의)
+    static let definitionVersionKey = "routineDefinitionVersion"
+
+    /// 앱 실행 시 Cloud 모드 routine 동기화 — 정의가 구버전이면 저장된 설정으로 register(기존 routine 을 그 자리에서 갱신), 아니면 status 만.
+    /// 사용자 조작 없이 릴리즈 변경(프롬프트·disallowed_tools)을 기존 사용자 routine 에 반영한다. 실패 시 저장 안 함 → 다음 실행에 재시도.
+    static func syncDefinitionIfNeeded() async {
+        let d = UserDefaults.standard
+        let cfg = Config.load()
+        let applied = d.integer(forKey: definitionVersionKey)
+
+        // 정의 최신이면 기존처럼 상태 확인만 (메인 칩 파랑/회색)
+        guard applied < definitionVersion else {
+            let r = await run("status")
+            d.set(isHealthy(r), forKey: "routineHealthy")
+            return
+        }
+
+        // 구버전 정의 → 저장된 핑 시각·env·모델로 register (SettingsView.registerRoutine 과 동일 입력)
+        let env = (d.string(forKey: "cloudEnvId") ?? "").trimmingCharacters(in: .whitespaces)
+        let model = cfg.fableOn ? "claude-fable-5" : ""
+        let r = await run("register", times: cfg.pingTimes, env: env, model: model)
+        let ok = isHealthy(r)
+        d.set(ok, forKey: "routineHealthy")
+        guard ok else { return }
+
+        // 성공 시에만 버전·등록본 기록 (설정 화면의 "갱신 필요" 오탐 방지)
+        d.set(definitionVersion, forKey: definitionVersionKey)
+        d.set(cfg.pingTimes.sorted().joined(separator: ","), forKey: "routineTimes")
+        d.set(model, forKey: "routineModel")
+    }
+
+    /// @returns routine 존재 + enabled (status/register 공통 건강 판정)
+    private static func isHealthy(_ r: PaceResult?) -> Bool {
+        (r?.ok == true) && !((r?.id.isEmpty) ?? true) && (r?.enabled == true)
+    }
+
     /// @param action register | disable | enable | status
     /// @param times  register 시 핑 시각 ["08:00", ...] (그 외 무시)
     /// @param env    (선택) 사용자가 `/schedule` 에서 복사한 env_id — 환경 자동탐지 실패(no_env) 대비

@@ -471,6 +471,8 @@ struct SettingsView: View {
             routineTimes = currentCSV
             routineModel = pingModel   // 등록된 발화 모델 기록 — Fable 토글 변경 감지(갱신 버튼)용
             routineHealthy = true
+            // 직접 적용도 최신 정의 반영 완료 — 실행 시 자동 재등록 중복 방지
+            UserDefaults.standard.set(RoutineService.definitionVersion, forKey: RoutineService.definitionVersionKey)
             lastNextRunAt = r?.nextRunAt   // 성공 팝업 안내용
             save(mode: mode, fable: fableTrack)   // 성공 시에만 config 확정 (실패·타임아웃 시 불일치 방지)
             initialMode = mode

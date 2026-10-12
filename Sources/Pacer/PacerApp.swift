@@ -478,13 +478,9 @@ final class UsageModel: ObservableObject {
         updateTimer = Timer.scheduledTimer(withTimeInterval: 24 * 60 * 60, repeats: true) { [weak self] _ in
             Task { @MainActor in await self?.checkUpdate() }
         }
-        // Cloud 모드면 routine 실제 상태를 백그라운드 확인 (메인 칩 파랑/회색)
+        // Cloud 모드면 routine 동기화 백그라운드 — 정의 구버전이면 자동 재등록(업데이트 반영), 아니면 상태 확인만 (메인 칩 파랑/회색)
         if Config.load().mode == "cloud" {
-            Task {
-                let r = await RoutineService.run("status")
-                let healthy = (r?.ok == true) && !((r?.id.isEmpty) ?? true) && (r?.enabled == true)
-                UserDefaults.standard.set(healthy, forKey: "routineHealthy")
-            }
+            Task { await RoutineService.syncDefinitionIfNeeded() }
         }
         // 자동 폴링 15분 — 너무 잦으면 429 나므로 넓게 (claude-usage-bar 는 30분)
         pollTimer = Timer.scheduledTimer(withTimeInterval: 15 * 60, repeats: true) { [weak self] _ in
