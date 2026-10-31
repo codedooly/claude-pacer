@@ -94,7 +94,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateTitle() {
-        let pct = model.usage?.fiveHour.map { " \($0.pct)%" } ?? ""
+        // 세션 없음 모드(Ultra) 는 5h 가 없으니 주간 % 를 메뉴바에 표시
+        let window = (model.usage?.hasSession ?? true) ? model.usage?.fiveHour : model.usage?.sevenDay
+        let pct = window.map { " \($0.pct)%" } ?? ""
         statusItem.button?.attributedTitle = NSAttributedString(
             string: pct, attributes: [.font: NSFont.systemFont(ofSize: 12)]) // 메뉴바 기본보다 작게
         updateBadge()
@@ -544,11 +546,18 @@ final class UsageModel: ObservableObject {
         case .success(let u):
             usage = u
             error = nil
+            // 세션 유무를 설정 창(SettingsView) 이 읽을 수 있게 저장 — Ultra 안내 배너 표시 분기
+            UserDefaults.standard.set(u.hasSession, forKey: "usageHasSession")
             // 오늘 5h 피크를 창 슬롯별로 누적 (Usage 탭 히트맵용)
             if let fh = u.fiveHour {
                 UsageHistory.record(pct: fh.pct, resetsAt: fh.resetsAt, pingTimes: pingTimes)
                 // Cloud 모드: 창 시작 역산 → 핑 슬롯 근처면 Pace log 에 auto 기록
-                if pingMode == "cloud", let r = fh.resetsAt { recordAutoPing(resetsAt: r) }
+                if pingMode == "cloud", let r = fh.resetsAt { recordAutoPing(resetsAt: r, windowLength: 5 * 3600) }
+            } else if pingMode == "cloud", !u.hasSession {
+                // 세션 없음 모드(Ultra) Cloud: 5h 역산 불가 → Fable 주간 창 시작(resets−7d) 으로 대신 역산
+                if let r = u.weeklyScoped.first(where: { $0.resetsAt != nil })?.resetsAt {
+                    recordAutoPing(resetsAt: r, windowLength: 7 * 86400)
+                }
             }
             // 리셋 경계 순간: resets_at 이 과거(=resetting)면 API 가 1~2분간 stale.
             // 사용자가 아무것도 안 해도 매끄럽게 정상화되도록 45초 뒤 자동 재조회(최대 3회). 정상화되면 카운터 리셋.
@@ -575,10 +584,11 @@ final class UsageModel: ObservableObject {
         updatedAt = Date()
     }
 
-    /// Cloud 발화 추정 — 5h 창 시작(resets−5h)이 핑 슬롯 근처면 Pace log 에 auto 로 기록.
-    private func recordAutoPing(resetsAt: Date) {
-        let start = resetsAt.addingTimeInterval(-5 * 3600)
-        let slot = UsageHistory.slotName(for: resetsAt, pingTimes: pingTimes)
+    /// Cloud 발화 추정 — 창 시작(resets−windowLength)이 핑 슬롯 근처면 Pace log 에 auto 로 기록.
+    /// 세션 모드는 5h 창, 세션 없음 모드(Ultra)는 Fable 주간 창(7d) 기준.
+    private func recordAutoPing(resetsAt: Date, windowLength: TimeInterval) {
+        let start = resetsAt.addingTimeInterval(-windowLength)
+        let slot = UsageHistory.slotName(for: start.addingTimeInterval(5 * 3600), pingTimes: pingTimes)
         let cal = Calendar.current
         let startMin = cal.component(.hour, from: start) * 60 + cal.component(.minute, from: start)
         let p = slot.split(separator: ":")
@@ -640,7 +650,7 @@ struct MenuContent: View {
             // Pace/Usage 탭 — 콤팩트 캡슐 토글(가운데 정렬), 선택 쪽 보라 채움. 애플 캘린더 세그먼트 톤
             HStack(spacing: 4) {
                 tabButton(tr(lang, "Pace", "페이스"), 0)
-                tabButton(tr(lang, "Usage", "사용량"), 1)
+                tabButton((model.usage?.hasSession ?? true) ? tr(lang, "Usage", "사용량") : tr(lang, "Weekly", "주간"), 1)
             }
             .padding(3)
             .background(Color.white.opacity(0.06), in: Capsule())
@@ -689,8 +699,11 @@ struct MenuContent: View {
             ZStack(alignment: .top) {
                 if tab == 0 {
                     PingCalendar(pingTimes: model.pingTimes, pings: model.pings, holidays: model.holidays, skipWeekends: model.skipWeekends, monthOffset: monthOffset)
-                } else {
+                } else if model.usage?.hasSession ?? true {
                     UsageHeatmap(history: model.usageHistory, pingTimes: model.pingTimes, monthOffset: monthOffset)
+                } else {
+                    // 세션 없음 모드(Ultra): 5h 슬롯 히트맵은 데이터가 안 쌓이므로 주간 소스 분해로 대체
+                    UsageBreakdown(rows: model.usage?.breakdown ?? [], weekly: model.usage?.sevenDay, accent: Self.accent7d)
                 }
             }
             .frame(height: calendarHeight, alignment: .top)   // 탭 전환 시 높이 고정 (캘린더/히트맵 동일)
@@ -729,23 +742,25 @@ struct MenuContent: View {
             scoped = [ScopedLimit(name: "Fable", pct: 45, resetsAt: Date().addingTimeInterval(3 * 86400 + 5 * 3600))]
         }
         #endif
-        let compact = !scoped.isEmpty          // 3개+ 이면 도넛 축소·간격 확보
+        let compact = ((model.usage?.hasSession ?? true) ? 2 : 1) + scoped.count >= 3   // 도넛 3개+ 이면 축소·간격 확보
         let size: CGFloat = compact ? 80 : 96
         let spacing: CGFloat = compact ? 16 : 32
         // 정체성 점(옵션2) — 채움 임계값과 안 겹치는 톤. 세션=블루, 주간전체=그린, 모델별=앰버/…
         let a5h = Color(red: 0.39, green: 0.78, blue: 0.98)
-        let a7d = Color(red: 0.40, green: 0.85, blue: 0.60)
+        let a7d = Self.accent7d
         let scopedAccents: [Color] = [Color(red: 1.0, green: 0.72, blue: 0.30), Color(red: 0.95, green: 0.55, blue: 0.78)]
 
         // 게이지 항목 일괄 구성 — (도넛 파라미터 + 호버 말풍선 문구)
-        var items: [(pct: Int, label: String, sub: String, accent: Color, hollow: Bool, help: String)] = [
-            (model.usage?.fiveHour?.pct ?? 0, tr(lang, "5-Hour", "5시간"),
-             Self.remaining(model.usage?.fiveHour?.resetsAt, lang), a5h, false,
-             tr(lang, "5-hour session window — shared across all models", "5시간 세션 창 — 모든 모델 공용")),
-            (model.usage?.sevenDay?.pct ?? 0, tr(lang, "7-Day", "7일"),
-             Self.remaining(model.usage?.sevenDay?.resetsAt, lang), a7d, false,
-             tr(lang, "Weekly limit — all models combined", "주간 한도 — 모든 모델 합산")),
-        ]
+        var items: [(pct: Int, label: String, sub: String, accent: Color, hollow: Bool, help: String)] = []
+        // 5h 도넛은 세션 한도가 있는 플랜만 — 인증된 Ultra 는 세션 자체가 없어 숨김 (0%/데이터 없음 오해 방지)
+        if model.usage?.hasSession ?? true {
+            items.append((model.usage?.fiveHour?.pct ?? 0, tr(lang, "5-Hour", "5시간"),
+                          Self.remaining(model.usage?.fiveHour?.resetsAt, lang), a5h, false,
+                          tr(lang, "5-hour session window — shared across all models", "5시간 세션 창 — 모든 모델 공용")))
+        }
+        items.append((model.usage?.sevenDay?.pct ?? 0, tr(lang, "7-Day", "7일"),
+                      Self.remaining(model.usage?.sevenDay?.resetsAt, lang), a7d, false,
+                      tr(lang, "Weekly limit — all models combined", "주간 한도 — 모든 모델 합산")))
         // 주간 모델별(Fable 등) — 미사용(resetsAt nil)이면 "미사용".
         // 트래킹 OFF 인데 사용량이 잡히면(CLI 직접 사용) 빨간 테두리 점 — 호버 말풍선으로 트래킹 ON 유도
         for (i, s) in scoped.enumerated() {
@@ -990,6 +1005,9 @@ struct MenuContent: View {
     }
 
     /// 리셋까지 남은 시간 (값만 — DonutGauge 가 시계 아이콘과 함께 표시).
+    /// 주간 전체 게이지 정체성 색 (도넛 + 세션 없음 모드 분해 막대 공용)
+    static let accent7d = Color(red: 0.40, green: 0.85, blue: 0.60)
+
     static func remaining(_ date: Date?, _ lang: String) -> String {
         guard let date else { return tr(lang, "no data", "데이터 없음") }
         let secs = Int(date.timeIntervalSinceNow)

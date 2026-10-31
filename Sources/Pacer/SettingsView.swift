@@ -21,6 +21,7 @@ struct SettingsView: View {
     @AppStorage("routineModel") private var routineModel = ""   // 등록된 routine 발화 모델 ("" = 기본 haiku). Fable 토글 반영 여부 판단
     @AppStorage("routineHealthy") private var routineHealthy = true   // 마지막 status 결과: 클라우드에 routine 존재+enabled
     @AppStorage("cloudEnvId") private var cloudEnvId = ""   // no_env 시 사용자가 `/schedule` 에서 붙여넣는 환경ID
+    @AppStorage("usageHasSession") private var usageHasSession = true   // UsageModel 이 usage 응답으로 기록. false = 세션 없음 모드(인증된 Ultra)
     @State private var launchAtLogin = FileManager.default.fileExists(atPath: NSHomeDirectory() + "/Library/LaunchAgents/com.dooly.pacer.launch.plist")
 
     init() {
@@ -94,6 +95,21 @@ struct SettingsView: View {
                 Text(tr(lang, "Ping method", "핑 방식"))
             } footer: {
                 Text(methodFooter)
+            }
+
+            // 세션 없음 모드(Ultra) 안내 — 5h 창이 없어 핑의 역할이 Fable 주간 창 정렬로 줄어듦을 알림
+            if !usageHasSession {
+                Section {
+                    Label {
+                        Text(tr(lang,
+                                "Your plan has no 5-hour session limit (Ultra). Pings only align the Fable weekly window — if Fable tracking is off, you can turn auto-pacing off.",
+                                "이 플랜은 5시간 세션 한도가 없습니다 (Ultra). 핑은 Fable 주간 창 정렬에만 쓰입니다 — Fable 트래킹이 꺼져 있으면 자동 정렬을 꺼도 됩니다."))
+                            .font(.system(size: 11))
+                            .fixedSize(horizontal: false, vertical: true)
+                    } icon: {
+                        Image(systemName: "info.circle.fill").foregroundStyle(Color.claudeOrange)
+                    }
+                }
             }
 
             Section {

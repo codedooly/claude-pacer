@@ -79,7 +79,9 @@ final class DoctorModel: ObservableObject {
     private func loginCheck() async -> DoctorCheck {
         let s = await AuthService.status()
         if s.loggedIn {
-            let info = [s.email, s.plan.map { "Plan: \($0.capitalized)" }].compactMap { $0 }.joined(separator: " · ")
+            // 플랜은 UsageModel 의 라이브 값(profile plan_display_name — "Ultra"/"Max") 우선, 없으면 CLI subscriptionType 폴백
+            let planLabel = usage.plan ?? s.plan?.capitalized
+            let info = [s.email, planLabel.map { "Plan: \($0)" }].compactMap { $0 }.joined(separator: " · ")
             return DoctorCheck(id: "login", title: tr(lang, "Sign-in", "로그인"), level: .ok,
                 detail: info.isEmpty ? tr(lang, "Signed in", "로그인됨") : info)
         }

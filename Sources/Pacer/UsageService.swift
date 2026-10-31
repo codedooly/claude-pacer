@@ -13,11 +13,19 @@ struct ScopedLimit {
     let resetsAt: Date? // 미사용이면 null
 }
 
+/// 주간 사용량 소스 분해 한 행 — 예: Claude Code 74% / Chats 26%. (API seven_day_breakdown.rows[])
+struct BreakdownRow {
+    let name: String    // 표시명 (display_name — "Claude Code" / "Chats" / "Cowork" / "Other")
+    let pct: Int        // 주간 사용량 중 이 소스의 비중(%)
+}
+
 /// usage API 응답 정규화 결과.
 struct Usage {
     let fiveHour: UsageWindow?
     let sevenDay: UsageWindow?
     let weeklyScoped: [ScopedLimit]   // 주간 모델별 한도(Fable 등). limits 배열 기반 — 모델 늘면 자동 반영
+    let hasSession: Bool              // 5시간 세션 한도가 존재하는가. 인증된 Ultra 는 false (응답에 session 한도 자체가 없음)
+    let breakdown: [BreakdownRow]     // 주간 사용량 소스 분해 (세션 없음 모드의 Usage 탭 대체 데이터)
 }
 
 enum UsageError: Error, CustomStringConvertible {
@@ -70,7 +78,7 @@ struct UsageService {
     /// Claude Code 인증 토큰 존재 여부 (온보딩 분기용).
     func hasCredentials(from dict: [String: Any]? = nil) -> Bool { token(from: dict) != nil }
 
-    /// 구독 플랜 + 등급 — Keychain rateLimitTier 기반 ("Max 5x" / "Max 20x" / "Pro").
+    /// 구독 플랜 + 등급 — Keychain rateLimitTier 기반 ("Ultra" / "Max" / "Pro").
     /// 즉시·오프라인 표시용. 단 이 값은 토큰 재발급 전까지 stale(플랜 변경 미반영)이라
     /// refresh 는 `fetchPlan()`(서버 profile) 으로 덮어써 라이브 값을 우선한다.
     func plan(from dict: [String: Any]? = nil) -> String? {
@@ -83,15 +91,16 @@ struct UsageService {
     }
 
     /// rateLimitTier 문자열 → 표시 라벨. Keychain·profile 양쪽에서 공유.
+    /// 2026-10-30 개편 명칭 — 구 Max 20x = Ultra, 구 Max 5x = Max (tier 문자열 자체는 그대로 max_20x/max_5x)
     static func planLabel(fromTier tier: String) -> String? {
-        if tier.contains("max_20x") { return "Max (20x)" }
-        if tier.contains("max_5x") { return "Max (5x)" }
+        if tier.contains("max_20x") { return "Ultra" }
+        if tier.contains("max_5x") { return "Max" }
         if tier.contains("pro") { return "Pro" }
         if tier.contains("free") { return "Free" }
         return nil
     }
 
-    /// 실시간 플랜 — /api/oauth/profile 의 organization.rate_limit_tier 기반.
+    /// 실시간 플랜 — /api/oauth/profile 의 organization.plan_display_name(1순위) / rate_limit_tier(폴백) 기반.
     /// Keychain rateLimitTier 는 토큰 재발급 전까지 stale 이므로(플랜 업그레이드 시 usage·리셋만 갱신되고
     /// 라벨은 옛 등급 유지) 서버 값을 진실 소스로 쓴다. 실패 시 nil → 호출부가 Keychain 값 유지.
     func fetchPlan(from dict: [String: Any]? = nil) async -> String? {
@@ -110,6 +119,10 @@ struct UsageService {
         else { return nil }
 
         let org = obj["organization"] as? [String: Any]
+        // 서버가 주는 표시명 우선 (개편 후 tier 는 max_20x 그대로인데 표시명만 "Ultra" 로 바뀜)
+        if let name = (org?["plan_display_name"] as? String)?.trimmingCharacters(in: .whitespaces), !name.isEmpty {
+            return name
+        }
         let tier = (org?["rate_limit_tier"] as? String) ?? ""
         return Self.planLabel(fromTier: tier)
     }
@@ -146,8 +159,9 @@ struct UsageService {
         }
     }
 
-    /// API 응답 → {five_hour, seven_day, weeklyScoped}.
+    /// API 응답 → {five_hour, seven_day, weeklyScoped, hasSession, breakdown}.
     /// 세션·주간은 데스크탑 앱과 동일하게 `limits` 배열을 우선 사용(값 불일치 방지), 없으면 구 top-level 필드로 폴백.
+    /// 세션 유무는 플랜명이 아니라 응답으로 판별 — 미인증 Ultra 는 임시 세션 한도가 다시 보일 수 있음.
     static func parse(_ obj: [String: Any]) -> Usage {
         let limits = obj["limits"] as? [[String: Any]] ?? []
 
@@ -174,10 +188,20 @@ struct UsageService {
             scoped.append(ScopedLimit(name: name ?? "Model", pct: pct, resetsAt: parseReset(l["resets_at"])))
         }
 
+        // 주간 사용량 소스 분해 (Claude Code / Chats / Cowork / Other) — 세션 없음 모드의 Usage 탭용
+        let rows = (obj["seven_day_breakdown"] as? [String: Any])?["rows"] as? [[String: Any]] ?? []
+        let breakdown: [BreakdownRow] = rows.compactMap { r in
+            guard let name = r["display_name"] as? String else { return nil }
+            return BreakdownRow(name: name, pct: (r["percent"] as? NSNumber)?.intValue ?? 0)
+        }
+
+        let fiveHour = limitWindow("session") ?? legacyWindow("five_hour")
         return Usage(
-            fiveHour: limitWindow("session") ?? legacyWindow("five_hour"),
+            fiveHour: fiveHour,
             sevenDay: limitWindow("weekly_all") ?? legacyWindow("seven_day"),
-            weeklyScoped: scoped
+            weeklyScoped: scoped,
+            hasSession: fiveHour != nil,
+            breakdown: breakdown
         )
     }
 
