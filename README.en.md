@@ -71,15 +71,17 @@ But **schedule pings at 08 / 13 / 18**, and a fresh window opens at each — so 
 
 > **Your weekly total stays the same.** Pacer doesn't give you more — it **aligns your 5-hour flow to your core hours** so you use *the same amount, better.*
 
+> **On the Ultra plan (formerly Max 20x)?** Since the 2026-10-30 plan update, verified Ultra accounts have **no 5-hour window**. When the usage response carries no session limit, Pacer automatically hides the 5-hour gauge and switches the menu bar and Usage tab to a **weekly view** (usage share by source). Pings then only align the **Fable weekly window**, so if you don't use Fable tracking you can turn auto-pacing off. Max ($100, formerly Max 5x) and Pro keep the 5-hour window.
+
 ---
 
 ## At a glance
 
 |  |  |
 |---|---|
-| **Usage gauges** | 5-hour · 7-day limits as donut gauges — reset countdowns (clock icon) + `Plan: Max (5x)` badge |
+| **Usage gauges** | 5-hour · 7-day limits as donut gauges — reset countdowns (clock icon) + `Plan: Max` / `Plan: Ultra` badge (5-hour donut auto-hidden on Ultra) |
 | **Ping calendar** | This month's ping history, color-coded by status — `Sent` filled dot, `Auto` outline dot, `Failed` ✕, `Missed`/`Pending` |
-| **Usage heatmap** | Per-day peak by 5-hour slot, displayed as a density heatmap |
+| **Usage heatmap** | Per-day peak by 5-hour slot, displayed as a density heatmap (Ultra: replaced by weekly usage share bars) |
 | **Auto-align** | Choose Local (launchd) or Cloud (Routine) to fire pings on schedule |
 | **Pacer Doctor** | Self-diagnose connection issues with traffic-light status — includes Copy diagnostics button |
 
@@ -154,7 +156,7 @@ Full setup & troubleshooting → **[docs/cloud-setup.en.md](docs/cloud-setup.en.
 
 - **Top bar**: wordmark + Pace / Usage tab toggle
 - **Mode chip**: Local=green / Cloud active=blue / Cloud disconnected=gray (`Check required`)
-- **Plan badge**: `Plan: Max (5x)` (Claude orange)
+- **Plan badge**: `Plan: Max` · `Plan: Ultra` · `Plan: Pro` (Claude orange) — from the server profile's display name
 - **Donut gauges**: 5-Hour · 7-Day — with reset countdown (clock icon)
 - **Bottom buttons**: Refresh · Settings · Quit
 - **Right-click menu** (menu bar icon): Refresh · **Update** (self-update to the latest dmg) · **Help (About)** · Settings · **Re-login** (re-authenticate via browser OAuth) · **Pacer Doctor** (diagnostics screen) · Quit (Refresh/Settings disabled before login)

@@ -1,6 +1,6 @@
 ---
 name: "pace-schedule"
-description: "Pacer 의 5시간 윈도우 워밍 클라우드 routine 관리 — RemoteTrigger 로 register/disable/enable/status. ARGUMENTS 로 동작과 핑 시각을 받는다. 매일 지정 시각(KST)에 클라우드 Claude 가 가벼운 프롬프트(레포 한 줄 요약) 1건을 수행해 5h usage window 를 워밍한다. \"페이스 스케줄\", \"루틴 등록/해제\" 요청에 사용."
+description: "Pacer 의 5시간 윈도우 워밍(Ultra 는 Fable 주간 창 정렬) 클라우드 routine 관리 — RemoteTrigger 로 register/disable/enable/status. ARGUMENTS 로 동작과 핑 시각을 받는다. 매일 지정 시각(KST)에 클라우드 Claude 가 가벼운 프롬프트(레포 한 줄 요약) 1건을 수행해 5h usage window 를 워밍한다. \"페이스 스케줄\", \"루틴 등록/해제\" 요청에 사용."
 ---
 
 Pacer 의 워밍 routine(`pace-window-warm`)을 `RemoteTrigger`(claude.ai code triggers API)로 관리한다.
