@@ -71,7 +71,7 @@ But **schedule pings at 08 / 13 / 18**, and a fresh window opens at each — so 
 
 > **Your weekly total stays the same.** Pacer doesn't give you more — it **aligns your 5-hour flow to your core hours** so you use *the same amount, better.*
 
-> **On the Ultra plan (formerly Max 20x)?** Since the 2026-10-30 plan update, verified Ultra accounts have **no 5-hour window**. When the usage response carries no session limit, Pacer automatically hides the 5-hour gauge and switches the menu bar and Usage tab to a **weekly view** (usage share by source). Pings then only align the **Fable weekly window**, so if you don't use Fable tracking you can turn auto-pacing off. Max ($100, formerly Max 5x) and Pro keep the 5-hour window.
+> **On the Ultra plan (formerly Max 20x)?** Since the 2026-10-30 plan update, verified Ultra accounts have **no 5-hour window**. When the usage response carries no session limit, Pacer automatically hides the 5-hour gauge and switches the menu bar and Usage tab to a **weekly view** (usage share by source). The menu bar number defaults to the **Fable weekly %** (falls back to the overall weekly % when Fable is unused this week); pick Fable / Weekly / Both (`F45% · W12%`) under **Menu bar shows** in Settings. Pings then only align the **Fable weekly window**, so if you don't use Fable tracking you can turn auto-pacing off. Max ($100, formerly Max 5x) and Pro keep the 5-hour window.
 
 ---
 
