@@ -68,6 +68,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         cancellable = model.objectWillChange.sink { [weak self] _ in
             DispatchQueue.main.async { self?.updateTitle() }
         }
+        // 설정 창의 메뉴바 표시 기준(menubarMetric) 변경을 즉시 반영 — usage 재조회 없이 문자열만 다시 그림
+        NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.updateTitle()
+        }
 
         // 새 기능 1회 안내 — Fable 트래킹 (설정에 토글만 추가되면 존재를 모르므로 첫 실행에 한 번 안내)
         showFableIntroOnce()
@@ -94,12 +98,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func updateTitle() {
-        // 세션 없음 모드(Ultra) 는 5h 가 없으니 주간 % 를 메뉴바에 표시
-        let window = (model.usage?.hasSession ?? true) ? model.usage?.fiveHour : model.usage?.sevenDay
-        let pct = window.map { " \($0.pct)%" } ?? ""
         statusItem.button?.attributedTitle = NSAttributedString(
-            string: pct, attributes: [.font: NSFont.systemFont(ofSize: 12)]) // 메뉴바 기본보다 작게
+            string: menubarText(), attributes: [.font: NSFont.systemFont(ofSize: 12)]) // 메뉴바 기본보다 작게
         updateBadge()
+    }
+
+    /// 메뉴바 % 문자열 — 세션 모드는 5h, 세션 없음 모드(Ultra)는 설정(menubarMetric) 기준.
+    /// fable(기본) = Fable 주간 % (Fable 미사용이면 주간 전체로 폴백) · weekly = 주간 전체 % · both = 둘 다 (F/W 접두어)
+    private func menubarText() -> String {
+        guard let u = model.usage else { return "" }
+        // 세션 있는 플랜 — 기존 동작 그대로 5h %
+        if u.hasSession { return u.fiveHour.map { " \($0.pct)%" } ?? "" }
+
+        let metric = UserDefaults.standard.string(forKey: "menubarMetric") ?? "fable"
+        let weekly = u.sevenDay.map { "\($0.pct)%" }
+        // Fable 주간 한도 — 이름 매칭 우선, 없으면 첫 모델별 한도. resetsAt nil 이면 이번 주 미사용 → 표시할 숫자 없음
+        let fableLimit = u.weeklyScoped.first { $0.name.localizedCaseInsensitiveContains("fable") } ?? u.weeklyScoped.first
+        let fable = (fableLimit?.resetsAt != nil) ? fableLimit.map { "\($0.pct)%" } : nil
+
+        switch metric {
+        case "weekly":
+            return weekly.map { " \($0)" } ?? ""
+        case "both":
+            // Fable 데이터가 없으면 주간 전체만 (접두어 없이)
+            guard let fable else { return weekly.map { " \($0)" } ?? "" }
+            return " F\(fable)" + (weekly.map { " · W\($0)" } ?? "")
+        default:
+            return (fable ?? weekly).map { " \($0)" } ?? ""
+        }
     }
 
     /// 새 버전 알림 — 아이콘 우상단에 작은 보라 배지 점 (템플릿 아이콘은 그대로, 점만 별도 subview 오버레이).

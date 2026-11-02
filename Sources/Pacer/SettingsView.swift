@@ -22,6 +22,7 @@ struct SettingsView: View {
     @AppStorage("routineHealthy") private var routineHealthy = true   // 마지막 status 결과: 클라우드에 routine 존재+enabled
     @AppStorage("cloudEnvId") private var cloudEnvId = ""   // no_env 시 사용자가 `/schedule` 에서 붙여넣는 환경ID
     @AppStorage("usageHasSession") private var usageHasSession = true   // UsageModel 이 usage 응답으로 기록. false = 세션 없음 모드(인증된 Ultra)
+    @AppStorage("menubarMetric") private var menubarMetric = "fable"   // 세션 없음 모드 메뉴바 % 기준: fable(기본, 미사용 시 주간 전체 폴백) | weekly | both
     @State private var launchAtLogin = FileManager.default.fileExists(atPath: NSHomeDirectory() + "/Library/LaunchAgents/com.dooly.pacer.launch.plist")
 
     init() {
@@ -109,6 +110,18 @@ struct SettingsView: View {
                     } icon: {
                         Image(systemName: "info.circle.fill").foregroundStyle(Color.claudeOrange)
                     }
+
+                    // 메뉴바 % 기준 — 5h 가 없으니 어떤 주간 숫자를 띄울지 선택 (즉시 반영, 적용 버튼 불필요)
+                    Picker(tr(lang, "Menu bar shows", "메뉴바 표시"), selection: $menubarMetric) {
+                        Text("Fable").tag("fable")
+                        Text(tr(lang, "Weekly", "주간 전체")).tag("weekly")
+                        Text(tr(lang, "Both", "둘 다")).tag("both")
+                    }
+                    .pickerStyle(.segmented)
+                } footer: {
+                    Text(tr(lang,
+                            "Fable = Fable weekly % (falls back to the overall weekly % when Fable is unused this week). Both = F·W side by side.",
+                            "Fable = Fable 주간 % (이번 주 Fable 미사용이면 주간 전체 % 로 폴백). 둘 다 = F·W 나란히 표시."))
                 }
             }
 
